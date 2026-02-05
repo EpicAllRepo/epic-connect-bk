@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import Campaign from '../models/Campaign';
-import Contact from '../models/Contact';
-import List from '../models/List';
-import EmailJob from '../models/EmailJob';
+import Campaign from '../models/campaign.model';
+import Contact from '../models/contact.model';
+import List from '../models/list.model';
+import EmailJob from '../models/emailjob.model';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
     try {

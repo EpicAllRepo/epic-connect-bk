@@ -8,7 +8,6 @@ export interface ISMTP extends Document {
   fromEmail: string;
   fromName?: string;
   isDefault: boolean;
-
 }
 
 const SMTPSchema: Schema = new Schema({
@@ -19,7 +18,6 @@ const SMTPSchema: Schema = new Schema({
   fromEmail: { type: String, required: true },
   fromName: { type: String },
   isDefault: { type: Boolean, default: true }
-  
 });
 
 export default mongoose.model<ISMTP>('SMTP', SMTPSchema);

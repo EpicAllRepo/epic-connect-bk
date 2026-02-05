@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import Campaign from '../models/Campaign';
-import Contact, { IContact } from '../models/Contact';
-import EmailJob, { IEmailJob } from '../models/EmailJob';
+import Campaign from '../models/campaign.model';
+import Contact, { IContact } from '../models/contact.model';
+import EmailJob, { IEmailJob } from '../models/emailjob.model';
 
 export const getCampaigns = async (req: Request, res: Response) => {
     try {

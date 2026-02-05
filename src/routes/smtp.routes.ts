@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSMTPConfig, saveSMTPConfig, updateSMTPConfig } from '../controllers/smtpController';
+import { getSMTPConfig, saveSMTPConfig, updateSMTPConfig } from '../controllers/smtp.controller';
 
 const router = express.Router();
 

@@ -1,11 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import campaignRoutes from './routes/campaignRoutes';
-import contactRoutes from './routes/contactRoutes';
-import listRoutes from './routes/listRoutes';
-import smtpRoutes from './routes/smtpRoutes';
-import dashboardRoutes from './routes/dashboardRoutes';
-import sentRoutes from './routes/sentRoutes';
+import campaignRoutes from './routes/campaign.routes';
+import contactRoutes from './routes/contact.routes';
+import listRoutes from './routes/list.routes';
+import smtpRoutes from './routes/smtp.routes';
+import dashboardRoutes from './routes/dashboard.routes';
+import sentRoutes from './routes/sent.routes';
 
 
 const app = express();

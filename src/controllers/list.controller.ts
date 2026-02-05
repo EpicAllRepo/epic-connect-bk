@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import List from '../models/List';
-import Contact from '../models/Contact';
+import List from '../models/list.model';
+import Contact from '../models/contact.model';
 
 // GET All Lists
 export const getLists = async (req: Request, res: Response) => {

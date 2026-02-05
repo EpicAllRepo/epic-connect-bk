@@ -1,5 +1,5 @@
 import express from 'express';
-import { createCampaign, getCampaigns, deleteCampaign } from '../controllers/campaignController';
+import { createCampaign, getCampaigns, deleteCampaign } from '../controllers/campaign.controller';
 
 const router = express.Router();
 

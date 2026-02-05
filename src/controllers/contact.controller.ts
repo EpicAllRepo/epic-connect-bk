@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import Contact from '../models/Contact';
-import List from '../models/List';
+import Contact from '../models/contact.model';
+import List from '../models/list.model';
 import fs from 'fs';
 import csv from 'csv-parser';
 import * as xlsx from 'xlsx';

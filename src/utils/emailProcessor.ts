@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
-import EmailJob, { IEmailJob } from '../models/EmailJob';
-import SMTP, { ISMTP } from '../models/SMTP';
-import Campaign, { ICampaign } from '../models/Campaign';
+import EmailJob, { IEmailJob } from '../models/emailjob.model';
+import SMTP, { ISMTP } from '../models/smtp.model';
+import Campaign, { ICampaign } from '../models/campaign.model';
 
 const processQueue = async (): Promise<void> => {
     try {

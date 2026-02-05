@@ -9,7 +9,7 @@ import {
     getContactById,
     uploadContacts,
     assignContactToList
-} from '../controllers/contactController';
+} from '../controllers/contact.controller';
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });

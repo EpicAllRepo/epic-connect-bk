@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSentEmails, deleteSentHistory } from '../controllers/sentController';
+import { getSentEmails, deleteSentHistory } from '../controllers/sent.controller';
 
 const router = express.Router();
 

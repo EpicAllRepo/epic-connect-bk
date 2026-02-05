@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import EmailJob from '../models/EmailJob';
+import EmailJob from '../models/emailjob.model';
 
 // GET All Sent Emails (History)
 export const getSentEmails = async (req: Request, res: Response) => {

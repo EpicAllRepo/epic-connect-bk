@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import SMTP from '../models/SMTP';
+import SMTP from '../models/smtp.model';
 
 // GET SMTP Config
 export const getSMTPConfig = async (req: Request, res: Response) => {
