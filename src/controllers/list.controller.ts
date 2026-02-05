@@ -29,6 +29,23 @@ export const getLists = async (req: Request, res: Response) => {
     }
 };
 
+// GET Single List by ID
+export const getListById = async (req: Request, res: Response) => {
+    try {
+        const list = await List.findById(req.params.id);
+        if (!list) return res.status(404).json({ message: 'List not found' });
+        
+        const contactCount = await Contact.countDocuments({ lists: list._id });
+        
+        res.json({
+            ...list.toObject(),
+            contactCount
+        });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 // POST Create List
 export const createList = async (req: Request, res: Response) => {
     try {

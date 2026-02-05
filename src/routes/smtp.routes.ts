@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get('/', getSMTPConfig);
 router.post('/', saveSMTPConfig);
-router.put('/', updateSMTPConfig);
+router.put('/:id', updateSMTPConfig);
+
 
 export default router;
