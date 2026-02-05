@@ -5,6 +5,7 @@ import fs from 'fs';
 import csv from 'csv-parser';
 import * as xlsx from 'xlsx';
 import mongoose from 'mongoose';
+import { create } from 'domain';
 
 // GET All Contacts
 export const getContacts = async (req: Request, res: Response) => {
@@ -31,7 +32,7 @@ export const getContactById = async (req: Request, res: Response) => {
 export const createContact = async (req: Request, res: Response) => {
     try {
         const { email, name, lists } = req.body;
-        console.log(`👤 Attempting to create contact: ${email} (${name || 'No Name'})`);
+        console.log(`👤 Attempting to create contact: ${email} (${name || ' No Name'})`);
         console.log(`📂 Assigned lists: ${JSON.stringify(lists)}`);
         
         // Basic validation
@@ -44,6 +45,7 @@ export const createContact = async (req: Request, res: Response) => {
         const exists = await Contact.findOne({ email });
         if (exists) {
             console.warn(`⚠️ Create contact failed: Email ${email} already exists`);
+
             return res.status(400).json({ message: 'Contact with this email already exists' });
         }
 
