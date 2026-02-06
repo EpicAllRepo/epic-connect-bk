@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import List from '../models/list.model';
 import Contact from '../models/contact.model';
+import mongoose from 'mongoose';
 
 // GET All Lists
 export const getLists = async (req: Request, res: Response) => {
@@ -82,4 +83,49 @@ export const deleteList = async (req: Request, res: Response) => {
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
+};
+
+
+export const assignContactToList = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    let { listId, contactId, contactIds, listIds } = req.body;
+
+    // 1. Normalize List IDs (Always make it an array)
+    const rawListIds = Array.isArray(listIds) ? listIds : (listIds ? [listIds] : (listId ? [listId] : []));
+    const finalListIds = rawListIds.filter((id: any) => mongoose.Types.ObjectId.isValid(id));
+
+    // 2. Normalize Contact IDs (Always make it an array)
+    const rawContactIds = Array.isArray(contactIds) ? contactIds : (contactIds ? [contactIds] : (contactId ? [contactId] : []));
+    const finalContactIds = rawContactIds.filter((id: any) => mongoose.Types.ObjectId.isValid(id));
+
+    if (finalListIds.length === 0 || finalContactIds.length === 0) {
+      res.status(400).json({ 
+        message: "Valid listId and contactId(s) are required (MongoDB ID format)." 
+      });
+      return;
+    }
+
+    // 3. Update the Lists to include these Contacts
+    await List.updateMany(
+      { _id: { $in: finalListIds } },
+      { $addToSet: { contacts: { $each: finalContactIds } } }
+    );
+
+    // 4. Update the Contacts to include these Lists
+    await Contact.updateMany(
+      { _id: { $in: finalContactIds } },
+      { $addToSet: { lists: { $each: finalListIds } } }
+    );
+
+    res.json({ 
+      message: "Assignment successful ✅",
+      assignedContacts: finalContactIds.length,
+      assignedToLists: finalListIds.length
+    });
+  } catch (error: any) {``
+    res.status(500).json({ message: "Assignment failed", error: error.message });
+  }
 };
