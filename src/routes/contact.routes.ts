@@ -8,7 +8,6 @@ import {
     importContacts,
     getContactById,
     uploadContacts,
-    // assignContactToList
 } from '../controllers/contact.controller';
 
 const router = express.Router();
@@ -19,7 +18,6 @@ router.get('/:id', getContactById);
 router.post('/', createContact);
 router.post('/import', importContacts);
 router.post('/upload', upload.single('file'), uploadContacts);
-// router.post('/assign', assignContactToList);
 router.put('/:id', updateContact);
 router.delete('/:id', deleteContact);
 

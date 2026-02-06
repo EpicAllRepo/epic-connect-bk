@@ -113,30 +113,6 @@ export const deleteContact = async (req: Request, res: Response) => {
     }
 };
 
-// 🔗 Assign Contact to List by ID
-// export const assignContactToList = async (req: Request, res: Response) => {
-//     try {
-//         const { contactId, listId } = req.body;
-//         console.log(`🔗 Assigning Contact ${contactId} to List ${listId}`);
-
-//         if (!mongoose.Types.ObjectId.isValid(contactId) || !mongoose.Types.ObjectId.isValid(listId)) {
-//             return res.status(400).json({ message: 'Invalid Contact ID or List ID' });
-//         }
-
-//         const contact = await Contact.findByIdAndUpdate(
-//             contactId,
-//             { $addToSet: { lists: new mongoose.Types.ObjectId(listId) } },
-//             { new: true }
-//         );
-
-//         if (!contact) return res.status(404).json({ message: 'Contact not found' });
-
-//         res.json({ message: 'Contact assigned to list successfully', contact });
-//     } catch (err: any) {
-//         res.status(500).json({ message: err.message });
-//     }
-// };
-
 // 📤 Bulk Upload Contacts (CSV / Excel)
 export const uploadContacts = async (
     req: any,
