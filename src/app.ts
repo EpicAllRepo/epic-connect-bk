@@ -14,7 +14,7 @@ app.use(express.json());
 // Middleware
 app.use(
   cors({
-    origin: "*",
+    origin: "http://localhost:*",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
