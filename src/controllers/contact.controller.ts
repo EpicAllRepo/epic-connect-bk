@@ -7,18 +7,6 @@ import * as xlsx from 'xlsx';
 import mongoose from 'mongoose';
 import { create } from 'domain';
 
-// GET Contact Fields (for dynamic placeholders)
-export const getContactFields = (req: Request, res: Response) => {
-    const fields = [
-        { key: '{{firstName}}', label: 'First Name', description: 'User First Name' },
-        { key: '{{lastName}}', label: 'Last Name', description: 'User Last Name' },
-        { key: '{{email}}', label: 'Email', description: 'User Email Address' },
-        { key: '{{name}}', label: 'Full Name', description: 'Combined First & Last Name' }
-        
-    ];
-    res.json(fields);
-};
-
 // GET All Contacts
 export const getContacts = async (req: Request, res: Response) => {
     try {
@@ -43,11 +31,8 @@ export const getContactById = async (req: Request, res: Response) => {
 // POST Create Contact
 export const createContact = async (req: Request, res: Response) => {
     try {
-        const { email, firstName, lastName, lists } = req.body;
-        // Construct full name if not provided directly, or just use firstName + lastName
-        const fullName = `${firstName || ''} ${lastName || ''}`.trim();
-
-        console.log(`👤 Attempting to create contact: ${email} (Name: ${fullName})`);
+        const { email, name, lists } = req.body;
+        console.log(`👤 Attempting to create contact: ${email} (${name || ' No Name'})`);
         console.log(`📂 Assigned lists: ${JSON.stringify(lists)}`);
         
         // Basic validation
@@ -63,12 +48,10 @@ export const createContact = async (req: Request, res: Response) => {
 
             return res.status(400).json({ message: 'Contact with this email already exists' });
         }
-    
+
         const newContact = await Contact.create({
             email,
-            firstName,
-            lastName,
-            name: fullName, // Keep 'name' for backward compatibility
+            name,
             lists: lists || []
         });
 
