@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IContact extends Document {
   email: string;
   name?: string;
+  firstName?: string;
+  lastName?: string;
   lists: mongoose.Types.ObjectId[];
   createdAt: Date;
 }
@@ -10,6 +12,8 @@ export interface IContact extends Document {
 const ContactSchema: Schema = new Schema({
   email: { type: String, required: true, unique: true },
   name: { type: String },
+  firstName: { type: String },
+  lastName: { type: String },
   lists: [{ type: mongoose.Schema.Types.ObjectId, ref: 'List' }],
   createdAt: { type: Date, default: Date.now }
 });

@@ -36,11 +36,14 @@ export const getListById = async (req: Request, res: Response) => {
         const list = await List.findById(req.params.id);
         if (!list) return res.status(404).json({ message: 'List not found' });
         
+        // Fetch contacts that have this list explicitly assigned
+        const contacts = await Contact.find({ lists: list._id });
         const contactCount = await Contact.countDocuments({ lists: list._id });
         
         res.json({
             ...list.toObject(),
-            contactCount
+            contactCount,
+            contacts // Return the actual contacts from the Contact collection
         });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
