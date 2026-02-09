@@ -30,38 +30,56 @@ export const getContactById = async (req: Request, res: Response) => {
 
 // POST Create Contact
 export const createContact = async (req: Request, res: Response) => {
-    try {
-        const { email, name, lists } = req.body;
-        console.log(`👤 Attempting to create contact: ${email} (${name || ' No Name'})`);
-        console.log(`📂 Assigned lists: ${JSON.stringify(lists)}`);
-        
-        // Basic validation
-        if (!email) {
-            console.warn("⚠️ Create contact failed: Email is missing");
-            return res.status(400).json({ message: 'Email is required' });
-        }
+  try {
+    const { email, name, lists } = req.body;
 
-        // Check if email exists
-        const exists = await Contact.findOne({ email });
-        if (exists) {
-            console.warn(`⚠️ Create contact failed: Email ${email} already exists`);
-
-            return res.status(400).json({ message: 'Contact with this email already exists' });
-        }
-
-        const newContact = await Contact.create({
-            email,
-            name,
-            lists: lists || []
-        });
-
-        console.log(`✅ Contact created successfully: ${newContact._id}`);
-        res.status(201).json(newContact);
-    } catch (err: any) {
-        console.error("❌ Error in createContact:", err);
-        res.status(500).json({ message: 'Internal Server Error', error: err.message });
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
+
+    // 1️⃣ Check duplicate
+    const exists = await Contact.findOne({ email });
+    if (exists) {
+      return res
+        .status(400)
+        .json({ message: "Contact with this email already exists" });
+    }
+
+    // 2️⃣ Normalize + validate listIds
+    const listIds = Array.isArray(lists)
+      ? lists.filter(id => mongoose.Types.ObjectId.isValid(id))
+      : [];
+
+    // 3️⃣ Create Contact
+    const newContact = await Contact.create({
+      email,
+      name,
+      lists: listIds
+    });
+
+    // 4️⃣ 🔥 IMPORTANT: Update Lists collection
+    if (listIds.length > 0) {
+      await List.updateMany(
+        { _id: { $in: listIds } },
+        {
+          $addToSet: {
+            contacts: newContact._id
+          }
+        }
+      );
+    }
+
+    res.status(201).json({
+      message: "Contact created & assigned to lists ✅",
+      contact: newContact
+    });
+
+  } catch (err: any) {
+    console.error("❌ createContact error:", err);
+    res.status(500).json({ message: err.message });
+  }
 };
+
 
 // POST Import Contacts (Bonus: Bulk Create)
 export const importContacts = async (req: Request, res: Response) => {
@@ -87,20 +105,52 @@ export const importContacts = async (req: Request, res: Response) => {
 
 // PUT Update Contact
 export const updateContact = async (req: Request, res: Response) => {
-    try {
-        const { email, name, lists } = req.body;
-        const contact = await Contact.findByIdAndUpdate(
-            req.params.id, 
-            { email, name, lists },
-            { new: true } // Return updated doc
-        );
-        
-        if (!contact) return res.status(404).json({ message: 'Contact not found' });
-        res.json(contact);
-    } catch (err: any) {
-        res.status(400).json({ message: err.message });
+  try {
+    const { email, name, lists } = req.body
+    const contactId = req.params.id
+
+    // 🔹 existing contact
+    const existingContact = await Contact.findById(contactId)
+    if (!existingContact) {
+      return res.status(404).json({ message: "Contact not found" })
     }
-};
+
+    const prevLists = existingContact.lists.map(String)
+    const nextLists = lists?.map(String) || []
+
+    // 🔥 1️⃣ UPDATE CONTACT
+    if (email !== undefined) existingContact.email = email
+    if (name !== undefined) existingContact.name = name
+    if (lists !== undefined) existingContact.lists = nextLists
+
+    await existingContact.save()
+
+    // 🔥 2️⃣ REMOVE contact from OLD lists
+    const removedLists = prevLists.filter((id: string) => !nextLists.includes(id))
+
+    if (removedLists.length) {
+      await List.updateMany(
+        { _id: { $in: removedLists } },
+        { $pull: { contacts: contactId } }
+      )
+    }
+
+    // 🔥 3️⃣ ADD contact to NEW lists
+   const addedLists = nextLists.filter((id: string) => !prevLists.includes(id))
+
+    if (addedLists.length) {
+      await List.updateMany(
+        { _id: { $in: addedLists } },
+        { $addToSet: { contacts: contactId } } // duplicate safe
+      )
+    }
+
+    res.json(existingContact)
+  } catch (err: any) {
+    res.status(400).json({ message: err.message })
+  }
+}
+
 
 // DELETE Contact
 export const deleteContact = async (req: Request, res: Response) => {
