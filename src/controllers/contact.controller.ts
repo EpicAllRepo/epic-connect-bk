@@ -63,7 +63,7 @@ export const createContact = async (req: Request, res: Response) => {
 
             return res.status(400).json({ message: 'Contact with this email already exists' });
         }
-
+    
         const newContact = await Contact.create({
             email,
             firstName,
