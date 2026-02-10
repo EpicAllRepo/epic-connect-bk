@@ -5,12 +5,48 @@ import EmailJob, { IEmailJob } from '../models/emailjob.model';
 
 
 export const getCampaigns = async (req: Request, res: Response) => {
-    try {
-        const campaigns = await Campaign.find().sort({ createdAt: -1 });
-        res.json(campaigns);
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
-    }
+  try {
+    /* 🔹 1. GET ALL CAMPAIGNS */
+    const campaigns = await Campaign.find()
+      .sort({ createdAt: -1 })
+      .populate("lists", "name"); // optional
+
+    /* 🔹 2. GET TOTAL STATS */
+    const statsAgg = await Campaign.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalCampaigns: { $sum: 1 },
+          scheduledCampaigns: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "scheduled"] }, 1, 0],
+            },
+          },
+          totalSent: { $sum: "$stats.sent" },
+        },
+      },
+    ]);
+
+    /* 🔹 3. TOTAL RECIPIENTS (REAL CONTACT COUNT) */
+    const allListIds = campaigns.flatMap((c: any) => c.lists);
+    
+    const totalRecipients = await Contact.countDocuments({
+      lists: { $in: allListIds },
+    });
+
+    /* 🔹 4. FINAL RESPONSE */
+    res.json({
+      campaigns,
+      stats: {
+        totalCampaigns: statsAgg[0]?.totalCampaigns || 0,
+        scheduledCampaigns: statsAgg[0]?.scheduledCampaigns || 0,
+        totalSent: statsAgg[0]?.totalSent || 0,
+        totalRecipients,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 export const createCampaign = async (req: Request, res: Response) => {
