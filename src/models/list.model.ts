@@ -1,25 +1,17 @@
-import { Schema, model } from "mongoose";
+import mongoose, { Schema, Document } from 'mongoose';
 
-const listSchema = new Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true
-    },
-    description: {
-      type: String,
-      default: ""
-    },
-    contacts: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "Contact"
-      }
-    ]
-  },
-  { timestamps: true }
-);
+export interface IList extends Document {
+  name: string;
+  description?: string;
+  contacts: mongoose.Types.ObjectId[];
+  createdAt: Date;
+}
 
-export default model("List", listSchema);
+const ListSchema: Schema = new Schema({
+  name: { type: String, required: true },
+  description: { type: String },
+  contacts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Contact' }],
+  createdAt: { type: Date, default: Date.now }
+});
+
+export default mongoose.model<IList>('List', ListSchema);

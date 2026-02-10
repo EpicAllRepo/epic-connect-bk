@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import EmailJob, { IEmailJob } from '../models/emailjob.model';
 import SMTP, { ISMTP } from '../models/smtp.model';
 import Campaign, { ICampaign } from '../models/campaign.model';
+import { personalizeMessage } from './personalization';
 
 const processQueue = async (): Promise<void> => {
     try {
@@ -46,25 +47,15 @@ const processQueue = async (): Promise<void> => {
                 const contact = job.contactId as any; // Populated contact
 
                 // --- Personalization Logic (Replace {{name}} etc) ---
-                let personalizedBody = campaign.body;
-                let personalizedSubject = campaign.subject;
+                let personalizedBody: string;
+                let personalizedSubject: string;
 
                 if (contact) {
-                    const replaceMap: any = {
-                        '{{name}}': contact.name || '',
-                        '{{firstName}}': contact.firstName || contact.name?.split(' ')[0] || '',
-                        '{{lastName}}': contact.lastName || '',
-                        '{{email}}': contact.email || '',
-                        // Also support @ syntax if user accidentally types it
-                        '@name': contact.name || '',
-                        '@firstName': contact.firstName || '',
-                    };
-
-                    Object.keys(replaceMap).forEach(key => {
-                        const regex = new RegExp(key, 'g'); // Replace all occurrences
-                        personalizedBody = personalizedBody.replace(regex, replaceMap[key]);
-                        personalizedSubject = personalizedSubject.replace(regex, replaceMap[key]);
-                    });
+                    personalizedBody = personalizeMessage(campaign.body, contact as any);
+                    personalizedSubject = personalizeMessage(campaign.subject, contact as any);
+                } else {
+                    personalizedBody = campaign.body;
+                    personalizedSubject = campaign.subject;
                 }
                 // ----------------------------------------------------
                 

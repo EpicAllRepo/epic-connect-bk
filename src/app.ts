@@ -11,11 +11,10 @@ import sentRoutes from './routes/sent.routes';
 const app = express();
 app.use(express.json());
 
-// Middleware
+// Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
 app.use(
   cors({
-    origin: "http://localhost:3000",
-    credentials: true,
+    origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
