@@ -128,7 +128,7 @@ export const assignContactToList = async (
       assignedContacts: finalContactIds.length,
       assignedToLists: finalListIds.length
     });
-  } catch (error: any) {``
+  } catch (error: any) {
     res.status(500).json({ message: "Assignment failed", error: error.message });
   }
 };

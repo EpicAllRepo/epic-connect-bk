@@ -13,7 +13,7 @@ export const getSentEmails = async (req: Request, res: Response) => {
 
         const jobs = await EmailJob.find(query)
             .populate('campaignId', 'name subject')
-            .populate('contactId', 'name')
+            .populate('contactId', 'name firstName lastName email')
             .sort({ sentAt: -1 })
             .limit(Number(limit))
             .skip((Number(page) - 1) * Number(limit));

@@ -3,4 +3,6 @@ node_modules/
 .DS_Store
 dist/
 uploads/
-package-lock.json
+*.log
+.vscode/
+.idea/

@@ -5,7 +5,6 @@ import fs from 'fs';
 import csv from 'csv-parser';
 import * as xlsx from 'xlsx';
 import mongoose from 'mongoose';
-import { create } from 'domain';
 
 // GET All Contacts
 export const getContacts = async (req: Request, res: Response) => {
@@ -28,10 +27,23 @@ export const getContactById = async (req: Request, res: Response) => {
     }
 };
 
+// Helper: build firstName/lastName from name or use provided first/last
+const toFirstLastName = (body: { name?: string; firstName?: string; lastName?: string }) => {
+  let firstName = (body.firstName ?? '').trim();
+  let lastName = (body.lastName ?? '').trim();
+  const name = (body.name ?? '').trim();
+  if (name && !firstName && !lastName) {
+    const parts = name.split(/\s+/);
+    firstName = parts[0] ?? '';
+    lastName = parts.slice(1).join(' ') ?? '';
+  }
+  return { firstName, lastName, name: [firstName, lastName].filter(Boolean).join(' ') || undefined };
+};
+
 // POST Create Contact
 export const createContact = async (req: Request, res: Response) => {
   try {
-    const { email, name, lists } = req.body;
+    const { email, name, firstName, lastName, lists } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
@@ -50,10 +62,14 @@ export const createContact = async (req: Request, res: Response) => {
       ? lists.filter(id => mongoose.Types.ObjectId.isValid(id))
       : [];
 
-    // 3️⃣ Create Contact
+    const { firstName: fn, lastName: ln, name: fullName } = toFirstLastName({ name, firstName, lastName });
+
+    // 3️⃣ Create Contact (firstName, lastName everywhere)
     const newContact = await Contact.create({
       email,
-      name,
+      firstName: fn,
+      lastName: ln,
+      name: fullName,
       lists: listIds
     });
 
@@ -81,24 +97,37 @@ export const createContact = async (req: Request, res: Response) => {
 };
 
 
-// POST Import Contacts (Bonus: Bulk Create)
+// POST Import Contacts (Bulk Create) - array of { email, firstName?, lastName?, name?, lists? }
 export const importContacts = async (req: Request, res: Response) => {
     try {
-        const { contacts } = req.body; // Expects array of { email, name, lists? }
+        const { contacts } = req.body;
         
         if (!Array.isArray(contacts)) {
             return res.status(400).json({ message: 'Invalid data format. Expected array of contacts.' });
         }
 
-        const result = await Contact.insertMany(contacts, { ordered: false }); 
-        // ordered: false allows continuing even if some fail (like duplicates)
+        const normalized = contacts.map((c: any) => {
+            const { firstName, lastName, name } = toFirstLastName({
+                name: c.name,
+                firstName: c.firstName,
+                lastName: c.lastName
+            });
+            return {
+                email: c.email,
+                firstName,
+                lastName,
+                name: name || undefined,
+                lists: Array.isArray(c.lists) ? c.lists : []
+            };
+        });
+
+        const result = await Contact.insertMany(normalized, { ordered: false });
 
         res.status(201).json({ 
             message: `Successfully imported ${result.length} contacts`,
             count: result.length 
         });
     } catch (err: any) {
-        // If some duplicates failed, we still likely succeeded with others
         res.status(400).json({ message: 'Some contacts could not be imported (likely duplicates)', error: err.message });
     }
 };
@@ -106,7 +135,7 @@ export const importContacts = async (req: Request, res: Response) => {
 // PUT Update Contact
 export const updateContact = async (req: Request, res: Response) => {
   try {
-    const { email, name, lists } = req.body
+    const { email, name, firstName, lastName, lists } = req.body
     const contactId = req.params.id
 
     // 🔹 existing contact
@@ -118,10 +147,18 @@ export const updateContact = async (req: Request, res: Response) => {
     const prevLists = existingContact.lists.map(String)
     const nextLists = lists?.map(String) || []
 
-    // 🔥 1️⃣ UPDATE CONTACT
+    // 🔥 1️⃣ UPDATE CONTACT (firstName, lastName)
     if (email !== undefined) existingContact.email = email
+    if (firstName !== undefined) existingContact.firstName = firstName
+    if (lastName !== undefined) existingContact.lastName = lastName
     if (name !== undefined) existingContact.name = name
     if (lists !== undefined) existingContact.lists = nextLists
+    // If firstName/lastName provided, keep name in sync
+    if (firstName !== undefined || lastName !== undefined) {
+      const fn = firstName !== undefined ? firstName : existingContact.firstName
+      const ln = lastName !== undefined ? lastName : existingContact.lastName
+      existingContact.name = [fn, ln].filter(Boolean).join(' ') || undefined
+    }
 
     await existingContact.save()
 
@@ -181,38 +218,41 @@ export const uploadContacts = async (
     console.log(`📂 Processing file: ${file.originalname}, mimetype: ${file.mimetype}, path: ${filePath}`);
 
     try {
-      const contacts: { email: string; name?: string }[] = [];
+      const contacts: { email: string; firstName?: string; lastName?: string }[] = [];
   
-      // Helper to find common header names
-      const getEmailAndName = (row: any) => {
+      // Helper: detect email, firstName, lastName from CSV/Excel columns
+      const getEmailAndNames = (row: any) => {
         let email = "";
-        let name = "";
+        let firstName = "";
+        let lastName = "";
   
         const emailKeys = ["email", "gmail", "mail", "e-mail", "email address", "emails", "id", "user email"];
-        const nameKeys = ["name", "full name", "first name", "contact name", "names", "user", "username"];
+        const firstNameKeys = ["first name", "firstname", "first", "fname", "given name"];
+        const lastNameKeys = ["last name", "lastname", "last", "lname", "surname", "family name"];
+        const fullNameKeys = ["name", "full name", "contact name", "names", "user", "username"];
   
-        console.log("🔍 Processing row keys:", Object.keys(row));
-
         for (const key of Object.keys(row)) {
           const lowerKey = key.toLowerCase().trim();
           const value = row[key]?.toString().trim();
           if (!value) continue;
 
-          console.log(`   - Key: "${key}" (normalized: "${lowerKey}"), Value: "${value}"`);
-
-          if (!email && emailKeys.some(k => lowerKey.includes(k))) {
-            // Basic email validation
-            if (value.includes('@')) {
-              email = value;
-              console.log(`     ✅ Found email: ${email}`);
-            }
+          if (!email && emailKeys.some(k => lowerKey.includes(k)) && value.includes('@')) {
+            email = value;
           }
-          if (!name && nameKeys.some(k => lowerKey.includes(k))) {
-            name = value;
-            console.log(`     ✅ Found name: ${name}`);
+          if (!firstName && firstNameKeys.some(k => lowerKey.includes(k))) {
+            firstName = value;
+          }
+          if (!lastName && lastNameKeys.some(k => lowerKey.includes(k))) {
+            lastName = value;
+          }
+          // If only "name" / "full name" column: split into first + last
+          if ((!firstName || !lastName) && fullNameKeys.some(k => lowerKey.includes(k))) {
+            const parts = value.split(/\s+/).filter(Boolean);
+            if (parts.length >= 1 && !firstName) firstName = parts[0];
+            if (parts.length >= 2 && !lastName) lastName = parts.slice(1).join(' ');
           }
         }
-        return { email, name };
+        return { email, firstName, lastName };
       };
   
       const fileExtension = file.originalname.split('.').pop()?.toLowerCase();
@@ -222,9 +262,9 @@ export const uploadContacts = async (
         const stream = fs.createReadStream(filePath).pipe(csv());
         
         for await (const data of stream) {
-          const { email, name } = getEmailAndName(data);
+          const { email, firstName, lastName } = getEmailAndNames(data);
           if (email) {
-            contacts.push({ email, name });
+            contacts.push({ email, firstName, lastName });
           }
         }
         console.log(`✅ CSV processed. Found ${contacts.length} valid contacts.`);
@@ -243,9 +283,9 @@ export const uploadContacts = async (
         console.log(`📝 Excel rows found: ${sheetData.length}`);
 
         sheetData.forEach((row) => {
-          const { email, name } = getEmailAndName(row);
+          const { email, firstName, lastName } = getEmailAndNames(row);
           if (email) {
-            contacts.push({ email, name });
+            contacts.push({ email, firstName, lastName });
           }
         });
   
@@ -274,8 +314,14 @@ export const uploadContacts = async (
       }
 
       const operations: any[] = contacts.map((c) => {
-        const updateData: any = { $set: { name: c.name } };
-        
+        const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || undefined;
+        const updateData: any = {
+          $set: {
+            firstName: c.firstName ?? '',
+            lastName: c.lastName ?? '',
+            name: fullName
+          }
+        };
         if (listId && mongoose.Types.ObjectId.isValid(listId)) {
           updateData.$addToSet = { lists: new mongoose.Types.ObjectId(listId) };
         }
