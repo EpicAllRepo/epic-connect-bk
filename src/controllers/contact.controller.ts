@@ -353,3 +353,29 @@ export const uploadContacts = async (
     }
   };
 
+  // get contact header fields
+  // GET Contact Fields (Dynamic Keys)
+export const getContactFields = async (req: Request, res: Response) => {
+  try {
+    // 🔹 Only 1 document needed
+    const contact = await Contact.findOne().lean()
+
+    if (!contact) {
+      return res.json({ fields: [] })
+    }
+
+    // ❌ Keys to exclude
+    const excludedKeys = ["_id", "__v", "lastName","createdAt","lists","name"]
+
+    // 🔹 Extract allowed keys
+    const fields = Object.keys(contact).filter(
+      key => !excludedKeys.includes(key)
+    )
+
+    res.json({
+      fields
+    })
+  } catch (err: any) {
+    res.status(500).json({ message: err.message })
+  }
+}

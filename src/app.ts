@@ -14,7 +14,8 @@ app.use(express.json());
 // Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
 app.use(
   cors({
-    origin: "*",
+    origin: "http://localhost:3000",
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
