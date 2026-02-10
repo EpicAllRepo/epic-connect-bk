@@ -56,6 +56,7 @@ export const getCampaigns = async (req: Request, res: Response) => {
         totalCampaigns: statsAgg[0]?.totalCampaigns || 0,
         scheduledCampaigns: statsAgg[0]?.scheduledCampaigns || 0,
         totalSent: statsAgg[0]?.totalSent || 0,
+        totalRecipients: campaigns.reduce((acc, c) => acc + (c.totalRecipients || 0), 0)
       },
     });
   } catch (err: any) {
