@@ -5,10 +5,11 @@ export interface ICampaign extends Document {
   subject: string;
   body: string;
   lists: mongoose.Types.ObjectId[];
-  status: 'draft' | 'scheduled' | 'processing' | 'completed' | 'failed';
+  status: 'draft' | 'scheduled' | 'processing' | 'sent' | 'failed';
   scheduleType: 'immediate' | 'specific-time' | 'interval';
   startTime: Date;
   intervalMinutes: number;
+  totalRecipients: number;
   stats: {
     sent: number;
     opened: number;
@@ -25,7 +26,7 @@ const CampaignSchema: Schema = new Schema({
   lists: [{ type: mongoose.Schema.Types.ObjectId, ref: 'List' }],
   status: { 
     type: String, 
-    enum: ['draft', 'scheduled', 'processing', 'completed', 'failed'], 
+    enum: ['draft', 'scheduled', 'processing', 'sent', 'failed'], 
     default: 'draft' 
   },
   scheduleType: {
@@ -35,6 +36,7 @@ const CampaignSchema: Schema = new Schema({
   },
   startTime: { type: Date, default: Date.now },
   intervalMinutes: { type: Number, default: 0 },
+  totalRecipients: { type: Number, default: 0 },
   stats: {
     sent: { type: Number, default: 0 },
     opened: { type: Number, default: 0 },

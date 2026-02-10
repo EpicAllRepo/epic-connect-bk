@@ -9,9 +9,31 @@ export const getCampaigns = async (req: Request, res: Response) => {
     /* 🔹 1. GET ALL CAMPAIGNS */
     const campaigns = await Campaign.find()
       .sort({ createdAt: -1 })
-      .populate("lists", "name"); // optional
+      .populate("lists", "name");
 
-    /* 🔹 2. GET TOTAL STATS */
+    /* 🔹 2. GET EMAIL STATS FOR EACH CAMPAIGN */
+    const campaignsWithStats = await Promise.all(
+      campaigns.map(async (campaign) => {
+        const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
+          EmailJob.countDocuments({ campaignId: campaign._id }),
+          EmailJob.countDocuments({ campaignId: campaign._id, status: 'sent' }),
+          EmailJob.countDocuments({ campaignId: campaign._id, status: 'failed' }),
+          EmailJob.countDocuments({ campaignId: campaign._id, status: 'pending' })
+        ]);
+
+        return {
+          ...campaign.toObject(),
+          emailBreakdown: {
+            total: totalJobs,
+            sent: sentJobs,
+            scheduled: pendingJobs,
+            draft: failedJobs  // Failed emails shown as "draft" for retry
+          }
+        };
+      })
+    );
+
+    /* 🔹 3. GET TOTAL STATS */
     const statsAgg = await Campaign.aggregate([
       {
         $group: {
@@ -27,21 +49,13 @@ export const getCampaigns = async (req: Request, res: Response) => {
       },
     ]);
 
-    /* 🔹 3. TOTAL RECIPIENTS (REAL CONTACT COUNT) */
-    const allListIds = campaigns.flatMap((c: any) => c.lists);
-    
-    const totalRecipients = await Contact.countDocuments({
-      lists: { $in: allListIds },
-    });
-
     /* 🔹 4. FINAL RESPONSE */
     res.json({
-      campaigns,
+      campaigns: campaignsWithStats,
       stats: {
         totalCampaigns: statsAgg[0]?.totalCampaigns || 0,
         scheduledCampaigns: statsAgg[0]?.scheduledCampaigns || 0,
         totalSent: statsAgg[0]?.totalSent || 0,
-        totalRecipients,
       },
     });
   } catch (err: any) {
@@ -53,7 +67,7 @@ export const createCampaign = async (req: Request, res: Response) => {
     try {
         const { name, subject, body, listIds, contactIds, intervalMinutes } = req.body;
 
-        // 1. Create the Campaign
+        // 1. Create the Campaign (status will be updated by emailProcessor)
         const campaign = await Campaign.create({
             name,
             subject,
@@ -61,7 +75,8 @@ export const createCampaign = async (req: Request, res: Response) => {
             lists: listIds || [],
             scheduleType: intervalMinutes && intervalMinutes > 0 ? 'interval' : 'immediate',
             intervalMinutes: intervalMinutes || 0,
-            status: 'scheduled'
+            status: 'scheduled',
+            totalRecipients: 0  // Will be updated after counting contacts
         });
 
         // 2. Fetch Contacts from Lists and Individual Selections
@@ -110,7 +125,13 @@ export const createCampaign = async (req: Request, res: Response) => {
             });
         });
 
+
         await EmailJob.insertMany(jobs);
+
+        // 4. Update campaign with totalRecipients
+        await Campaign.findByIdAndUpdate(campaign._id, {
+            totalRecipients: uniqueContacts.length
+        });
 
         res.status(201).json({ 
             success: true, 
@@ -145,3 +166,44 @@ export const deleteCampaign = async (req: Request, res: Response) => {
     }
 };
 
+export const getCampaignStatus = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        
+        const campaign = await Campaign.findById(id).populate('lists', 'name');
+        if (!campaign) {
+            return res.status(404).json({ message: "Campaign not found" });
+        }
+
+        // Get email job statistics
+        const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
+            EmailJob.countDocuments({ campaignId: id }),
+            EmailJob.countDocuments({ campaignId: id, status: 'sent' }),
+            EmailJob.countDocuments({ campaignId: id, status: 'failed' }),
+            EmailJob.countDocuments({ campaignId: id, status: 'pending' })
+        ]);
+
+        // Calculate progress percentage
+        const progress = totalJobs > 0 ? Math.round(((sentJobs + failedJobs) / totalJobs) * 100) : 0;
+
+        res.json({
+            campaign: {
+                id: campaign._id,
+                name: campaign.name,
+                status: campaign.status,
+                totalRecipients: campaign.totalRecipients || totalJobs,
+                createdAt: campaign.createdAt
+            },
+            emailStats: {
+                total: totalJobs,
+                sent: sentJobs,
+                draft: failedJobs,  // Failed emails shown as draft for retry
+                scheduled: pendingJobs,
+                progress: `${progress}%`
+            },
+            stats: campaign.stats
+        });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};

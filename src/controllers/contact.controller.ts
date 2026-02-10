@@ -352,3 +352,4 @@ export const uploadContacts = async (
       res.status(500).json({ message: "Failed to save contacts to database", error: error.message });
     }
   };
+

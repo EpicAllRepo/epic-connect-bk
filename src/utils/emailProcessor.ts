@@ -91,6 +91,46 @@ const processQueue = async (): Promise<void> => {
             }
         }
 
+        // 5. Update Campaign Status based on results
+        // Get all unique campaign IDs from processed jobs
+        const campaignIds = [...new Set(jobs.map(j => String((j.campaignId as any)._id)))];
+        
+        for (const campaignId of campaignIds) {
+            const campaign = await Campaign.findById(campaignId);
+            if (!campaign) continue;
+
+            // Count email job statuses for this campaign
+            const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
+                EmailJob.countDocuments({ campaignId }),
+                EmailJob.countDocuments({ campaignId, status: 'sent' }),
+                EmailJob.countDocuments({ campaignId, status: 'failed' }),
+                EmailJob.countDocuments({ campaignId, status: 'pending' })
+            ]);
+
+            // Update campaign status based on job results
+            let newStatus = campaign.status;
+
+            if (pendingJobs > 0) {
+                // Still has pending jobs - mark as processing
+                newStatus = 'processing';
+            } else if (sentJobs === totalJobs) {
+                // All emails sent successfully
+                newStatus = 'sent';
+            } else if (failedJobs === totalJobs) {
+                // All emails failed - move to draft for retry
+                newStatus = 'draft';
+            } else if (sentJobs > 0 && (sentJobs + failedJobs) === totalJobs) {
+                // Some sent, some failed - mark as sent (partial success)
+                newStatus = 'sent';
+            }
+
+            // Only update if status changed
+            if (newStatus !== campaign.status) {
+                await Campaign.findByIdAndUpdate(campaignId, { status: newStatus });
+                console.log(`[EmailProcessor] Campaign ${campaign.name} status updated: ${campaign.status} → ${newStatus}`);
+            }
+        }
+
     } catch (error) {
         console.error("[EmailProcessor] Critical Error:", error);
     }
