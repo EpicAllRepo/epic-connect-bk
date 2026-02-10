@@ -10,7 +10,7 @@ dotenv.config();
 connectDB();
 
 // Start the Background Processor
-startEmailProcessor();
+//startEmailProcessor();
 
 const PORT = process.env.PORT || 5000;
 

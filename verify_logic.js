@@ -1,5 +1,4 @@
-
-export const personalizeMessage = (text: string, contact: any): string => {
+const personalizeMessage = (text, contact) => {
   if (!text || !contact) return text || "";
 
   // 1. Get direct values from contact
@@ -9,7 +8,7 @@ export const personalizeMessage = (text: string, contact: any): string => {
   const name = (contact.name || (firstName + " " + lastName).trim() || email).trim();
 
   // 2. Clear mapping for all tags
-  const map: Record<string, string> = {
+  const map = {
     "email": email,
     "firstname": firstName,
     "first_name": firstName,
@@ -30,10 +29,31 @@ export const personalizeMessage = (text: string, contact: any): string => {
     result = result.replace(curlyRegex, val);
 
     // Replace @tag format (Strongest regex for @email, @firstname etc)
-    // Matches @, optional space, the tag, and stops at word boundary or non-word char
     const atRegex = new RegExp(`@\\s?${key}\\b|@\\s?${key}(?=[^a-zA-Z0-9])`, 'gi');
     result = result.replace(atRegex, val);
   });
 
   return result;
 };
+
+// --- TEST CASES ---
+const contact = {
+    email: "mohdmohsin@example.com",
+    firstName: "Mohsin",
+    lastName: "Khan"
+};
+
+const tests = [
+    "Hi @firstname, welcome!",
+    "Your email is @email.",
+    "Hello @ firstname (with space)",
+    "Hi @email, testing comma",
+    "Compare @firstname with @email"
+];
+
+console.log("--- PERSONALIZATION TEST RESULTS ---");
+tests.forEach(t => {
+    console.log(`Original: ${t}`);
+    console.log(`Result  : ${personalizeMessage(t, contact)}`);
+    console.log("------------------------------------");
+});
