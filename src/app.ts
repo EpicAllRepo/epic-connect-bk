@@ -9,6 +9,7 @@ import sentRoutes from './routes/sent.routes';
 
 
 const app = express();
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
