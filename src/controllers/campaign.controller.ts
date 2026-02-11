@@ -6,34 +6,89 @@ import EmailJob, { IEmailJob } from '../models/emailjob.model';
 
 export const getCampaigns = async (req: Request, res: Response) => {
   try {
-    /* 🔹 1. GET ALL CAMPAIGNS */
+    /* 🔹 1. PAGINATION PARAMS */
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 5;
+    const skip = (page - 1) * limit;
+
+    /* 🔹 2. TOTAL CAMPAIGNS COUNT */
+    const totalItems = await Campaign.countDocuments();
+
+    /* 🔹 3. FETCH PAGINATED CAMPAIGNS */
     const campaigns = await Campaign.find()
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate("lists", "name");
 
-    /* 🔹 2. GET EMAIL STATS FOR EACH CAMPAIGN */
-    const campaignsWithStats = await Promise.all(
-      campaigns.map(async (campaign) => {
-        const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
-          EmailJob.countDocuments({ campaignId: campaign._id }),
-          EmailJob.countDocuments({ campaignId: campaign._id, status: 'sent' }),
-          EmailJob.countDocuments({ campaignId: campaign._id, status: 'failed' }),
-          EmailJob.countDocuments({ campaignId: campaign._id, status: 'pending' })
-        ]);
+    const campaignIds = campaigns.map(c => c._id);
 
-        return {
-          ...campaign.toObject(),
-          emailBreakdown: {
-            total: totalJobs,
-            sent: sentJobs,
-            scheduled: pendingJobs,
-            draft: failedJobs  // Failed emails shown as "draft" for retry
-          }
+    /* 🔹 4. AGGREGATE EMAIL STATS IN SINGLE QUERY */
+    const emailStats = await EmailJob.aggregate([
+      {
+        $match: {
+          campaignId: { $in: campaignIds }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            campaignId: "$campaignId",
+            status: "$status"
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    /* 🔹 5. FORMAT EMAIL STATS INTO MAP */
+    const breakdownMap: Record<string, any> = {};
+
+    emailStats.forEach(stat => {
+      const campaignId = stat._id.campaignId.toString();
+      const status = stat._id.status;
+
+      if (!breakdownMap[campaignId]) {
+        breakdownMap[campaignId] = {
+          total: 0,
+          sent: 0,
+          scheduled: 0,
+          draft: 0
         };
-      })
-    );
+      }
 
-    /* 🔹 3. GET TOTAL STATS */
+      breakdownMap[campaignId].total += stat.count;
+
+      if (status === "sent") {
+        breakdownMap[campaignId].sent = stat.count;
+      }
+
+      if (status === "pending") {
+        breakdownMap[campaignId].scheduled = stat.count;
+      }
+
+      if (status === "failed") {
+        breakdownMap[campaignId].draft = stat.count;
+      }
+    });
+
+    /* 🔹 6. ATTACH BREAKDOWN TO CAMPAIGNS */
+    const campaignsWithStats = campaigns.map(campaign => {
+      const breakdown =
+        breakdownMap[campaign._id.toString()] || {
+          total: 0,
+          sent: 0,
+          scheduled: 0,
+          draft: 0
+        };
+
+      return {
+        ...campaign.toObject(),
+        emailBreakdown: breakdown
+      };
+    });
+
+    /* 🔹 7. GLOBAL STATS */
     const statsAgg = await Campaign.aggregate([
       {
         $group: {
@@ -41,28 +96,42 @@ export const getCampaigns = async (req: Request, res: Response) => {
           totalCampaigns: { $sum: 1 },
           scheduledCampaigns: {
             $sum: {
-              $cond: [{ $eq: ["$status", "scheduled"] }, 1, 0],
-            },
+              $cond: [{ $eq: ["$status", "scheduled"] }, 1, 0]
+            }
           },
-          totalSent: { $sum: "$stats.sent" },
-        },
-      },
+          totalSent: { $sum: "$stats.sent" }
+        }
+      }
     ]);
 
-    /* 🔹 4. FINAL RESPONSE */
+    /* 🔹 8. FINAL RESPONSE */
     res.json({
       campaigns: campaignsWithStats,
       stats: {
         totalCampaigns: statsAgg[0]?.totalCampaigns || 0,
         scheduledCampaigns: statsAgg[0]?.scheduledCampaigns || 0,
         totalSent: statsAgg[0]?.totalSent || 0,
-        totalRecipients: campaigns.reduce((acc, c) => acc + (c.totalRecipients || 0), 0)
+        totalRecipients: campaigns.reduce(
+          (acc, c) => acc + (c.totalRecipients || 0),
+          0
+        )
       },
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit
+      }
     });
+
   } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({
+      message: err.message || "Failed to fetch campaigns"
+    });
   }
 };
+
+
 
 export const createCampaign = async (req: Request, res: Response) => {
     try {
