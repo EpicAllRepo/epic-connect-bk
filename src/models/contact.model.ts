@@ -17,7 +17,9 @@ const ContactSchema: Schema = new Schema({
   lastName: { type: String, default: '' },
   lists: [{ type: mongoose.Schema.Types.ObjectId, ref: 'List' }],
   createdAt: { type: Date, default: Date.now }
-});
+},
+{timestamps: true}
+);
 
 // Backward compatibility: purane contacts jinke paas sirf "name" hai,
 // unke liye response me firstName/lastName name se derive ho jaye

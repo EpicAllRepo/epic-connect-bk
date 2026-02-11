@@ -8,23 +8,44 @@ import mongoose from 'mongoose';
 
 // GET All Contacts
 export const getContacts = async (req: Request, res: Response) => {
-    try {
-        const contacts = await Contact.find().populate('lists').sort({ createdAt: -1 });
-        res.json(contacts);
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
-    }
+  try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+
+    const skip = (page - 1) * limit;
+
+    const total = await Contact.countDocuments();
+
+    const contacts = await Contact.find()
+      .select("firstName lastName email phone lists createdAt updatedAt")
+      .populate("lists", "name")
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      data: contacts,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      totalContacts: total,
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 };
+
+
 
 // GET Single Contact
 export const getContactById = async (req: Request, res: Response) => {
-    try {
-        const contact = await Contact.findById(req.params.id).populate('lists');
-        if (!contact) return res.status(404).json({ message: 'Contact not found' });
-        res.json(contact);
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
-    }
+  try {
+    const contact = await Contact.findById(req.params.id).populate('lists');
+    if (!contact) return res.status(404).json({ message: 'Contact not found' });
+    res.json(contact);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // Helper: build firstName/lastName from name or use provided first/last
@@ -99,37 +120,37 @@ export const createContact = async (req: Request, res: Response) => {
 
 // POST Import Contacts (Bulk Create) - array of { email, firstName?, lastName?, name?, lists? }
 export const importContacts = async (req: Request, res: Response) => {
-    try {
-        const { contacts } = req.body;
-        
-        if (!Array.isArray(contacts)) {
-            return res.status(400).json({ message: 'Invalid data format. Expected array of contacts.' });
-        }
+  try {
+    const { contacts } = req.body;
 
-        const normalized = contacts.map((c: any) => {
-            const { firstName, lastName, name } = toFirstLastName({
-                name: c.name,
-                firstName: c.firstName,
-                lastName: c.lastName
-            });
-            return {
-                email: c.email,
-                firstName,
-                lastName,
-                name: name || undefined,
-                lists: Array.isArray(c.lists) ? c.lists : []
-            };
-        });
-
-        const result = await Contact.insertMany(normalized, { ordered: false });
-
-        res.status(201).json({ 
-            message: `Successfully imported ${result.length} contacts`,
-            count: result.length 
-        });
-    } catch (err: any) {
-        res.status(400).json({ message: 'Some contacts could not be imported (likely duplicates)', error: err.message });
+    if (!Array.isArray(contacts)) {
+      return res.status(400).json({ message: 'Invalid data format. Expected array of contacts.' });
     }
+
+    const normalized = contacts.map((c: any) => {
+      const { firstName, lastName, name } = toFirstLastName({
+        name: c.name,
+        firstName: c.firstName,
+        lastName: c.lastName
+      });
+      return {
+        email: c.email,
+        firstName,
+        lastName,
+        name: name || undefined,
+        lists: Array.isArray(c.lists) ? c.lists : []
+      };
+    });
+
+    const result = await Contact.insertMany(normalized, { ordered: false });
+
+    res.status(201).json({
+      message: `Successfully imported ${result.length} contacts`,
+      count: result.length
+    });
+  } catch (err: any) {
+    res.status(400).json({ message: 'Some contacts could not be imported (likely duplicates)', error: err.message });
+  }
 };
 
 // PUT Update Contact
@@ -173,7 +194,7 @@ export const updateContact = async (req: Request, res: Response) => {
     }
 
     // 🔥 3️⃣ ADD contact to NEW lists
-   const addedLists = nextLists.filter((id: string) => !prevLists.includes(id))
+    const addedLists = nextLists.filter((id: string) => !prevLists.includes(id))
 
     if (addedLists.length) {
       await List.updateMany(
@@ -190,171 +211,198 @@ export const updateContact = async (req: Request, res: Response) => {
 
 
 // DELETE Contact
-export const deleteContact = async (req: Request, res: Response) => {
-    try {
-        const contact = await Contact.findByIdAndDelete(req.params.id);
-        if (!contact) return res.status(404).json({ message: 'Contact not found' });
-        res.json({ message: 'Contact deleted successfully' });
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
+export const deleteContacts = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body || {};
+    const { id } = req.query;
+
+    // 🔴 SINGLE DELETE (query param)
+    if (id && typeof id === "string") {
+      const deleted = await Contact.findByIdAndDelete(id);
+
+      if (!deleted) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      return res.json({ message: "Contact deleted successfully" });
     }
+
+    // 🔵 BULK DELETE (body)
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      await Contact.deleteMany({ _id: { $in: ids } });
+
+      return res.json({
+        message: `${ids.length} contacts deleted successfully`,
+      });
+    }
+
+    return res.status(400).json({
+      message: "No id or ids provided",
+    });
+  } catch (err: any) {
+    console.error("Delete error:", err);
+    res.status(500).json({ message: err.message });
+  }
 };
+
+
+
 
 // 📤 Bulk Upload Contacts (CSV / Excel)
 export const uploadContacts = async (
-    req: any,
-    res: Response
-  ): Promise<void> => {
-    const file = req.file;
-    const { listId } = req.body;
+  req: any,
+  res: Response
+): Promise<void> => {
+  const file = req.file;
+  const { listId } = req.body;
 
-    if (!file) {
-      console.error("❌ No file received in uploadContacts");
-      res.status(400).json({ message: "No file selected. Please select a CSV or Excel file." });
-      return;
-    }
+  if (!file) {
+    console.error("❌ No file received in uploadContacts");
+    res.status(400).json({ message: "No file selected. Please select a CSV or Excel file." });
+    return;
+  }
 
-    const filePath = file.path;
-    console.log(`📂 Processing file: ${file.originalname}, mimetype: ${file.mimetype}, path: ${filePath}`);
+  const filePath = file.path;
+  console.log(`📂 Processing file: ${file.originalname}, mimetype: ${file.mimetype}, path: ${filePath}`);
 
-    try {
-      const contacts: { email: string; firstName?: string; lastName?: string }[] = [];
-  
-      // Helper: detect email, firstName, lastName from CSV/Excel columns
-      const getEmailAndNames = (row: any) => {
-        let email = "";
-        let firstName = "";
-        let lastName = "";
-  
-        const emailKeys = ["email", "gmail", "mail", "e-mail", "email address", "emails", "id", "user email"];
-        const firstNameKeys = ["first name", "firstname", "first", "fname", "given name"];
-        const lastNameKeys = ["last name", "lastname", "last", "lname", "surname", "family name"];
-        const fullNameKeys = ["name", "full name", "contact name", "names", "user", "username"];
-  
-        for (const key of Object.keys(row)) {
-          const lowerKey = key.toLowerCase().trim();
-          const value = row[key]?.toString().trim();
-          if (!value) continue;
+  try {
+    const contacts: { email: string; firstName?: string; lastName?: string }[] = [];
 
-          if (!email && emailKeys.some(k => lowerKey.includes(k)) && value.includes('@')) {
-            email = value;
-          }
-          if (!firstName && firstNameKeys.some(k => lowerKey.includes(k))) {
-            firstName = value;
-          }
-          if (!lastName && lastNameKeys.some(k => lowerKey.includes(k))) {
-            lastName = value;
-          }
-          // If only "name" / "full name" column: split into first + last
-          if ((!firstName || !lastName) && fullNameKeys.some(k => lowerKey.includes(k))) {
-            const parts = value.split(/\s+/).filter(Boolean);
-            if (parts.length >= 1 && !firstName) firstName = parts[0];
-            if (parts.length >= 2 && !lastName) lastName = parts.slice(1).join(' ');
-          }
+    // Helper: detect email, firstName, lastName from CSV/Excel columns
+    const getEmailAndNames = (row: any) => {
+      let email = "";
+      let firstName = "";
+      let lastName = "";
+
+      const emailKeys = ["email", "gmail", "mail", "e-mail", "email address", "emails", "id", "user email"];
+      const firstNameKeys = ["first name", "firstname", "first", "fname", "given name"];
+      const lastNameKeys = ["last name", "lastname", "last", "lname", "surname", "family name"];
+      const fullNameKeys = ["name", "full name", "contact name", "names", "user", "username"];
+
+      for (const key of Object.keys(row)) {
+        const lowerKey = key.toLowerCase().trim();
+        const value = row[key]?.toString().trim();
+        if (!value) continue;
+
+        if (!email && emailKeys.some(k => lowerKey.includes(k)) && value.includes('@')) {
+          email = value;
         }
-        return { email, firstName, lastName };
-      };
-  
-      const fileExtension = file.originalname.split('.').pop()?.toLowerCase();
-
-      if (file.mimetype === "text/csv" || fileExtension === 'csv') {
-        console.log("📄 Detected CSV format");
-        const stream = fs.createReadStream(filePath).pipe(csv());
-        
-        for await (const data of stream) {
-          const { email, firstName, lastName } = getEmailAndNames(data);
-          if (email) {
-            contacts.push({ email, firstName, lastName });
-          }
+        if (!firstName && firstNameKeys.some(k => lowerKey.includes(k))) {
+          firstName = value;
         }
-        console.log(`✅ CSV processed. Found ${contacts.length} valid contacts.`);
-        await saveToDatabase(contacts, res, filePath, listId);
-      } else if (
-        file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-        file.mimetype === "application/vnd.ms-excel" ||
-        file.mimetype === "application/octet-stream" ||
-        ['xlsx', 'xls'].includes(fileExtension || '')
-      ) {
-        console.log("📊 Detected Excel format");
-        const workbook = xlsx.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]) as any[];
-  
-        console.log(`📝 Excel rows found: ${sheetData.length}`);
-
-        sheetData.forEach((row) => {
-          const { email, firstName, lastName } = getEmailAndNames(row);
-          if (email) {
-            contacts.push({ email, firstName, lastName });
-          }
-        });
-  
-        console.log(`✅ Excel processed. Found ${contacts.length} valid contacts.`);
-        await saveToDatabase(contacts, res, filePath, listId);
-      } else {
-        console.error(`❌ Unsupported mimetype: ${file.mimetype}`);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        res.status(400).json({ message: `Format not supported (${file.mimetype}). Please use CSV or Excel (.xlsx).` });
+        if (!lastName && lastNameKeys.some(k => lowerKey.includes(k))) {
+          lastName = value;
+        }
+        // If only "name" / "full name" column: split into first + last
+        if ((!firstName || !lastName) && fullNameKeys.some(k => lowerKey.includes(k))) {
+          const parts = value.split(/\s+/).filter(Boolean);
+          if (parts.length >= 1 && !firstName) firstName = parts[0];
+          if (parts.length >= 2 && !lastName) lastName = parts.slice(1).join(' ');
+        }
       }
-    } catch (error: any) {
-      console.error("❌ Upload worker error:", error);
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      res.status(500).json({ message: "File processing failed", error: error.message });
-    }
-  };
-  
-  // Helper function to save contacts
-  const saveToDatabase = async (contacts: any[], res: Response, filePath: string, listId?: string) => {
-    try {
-      console.log(`💾 Saving ${contacts.length} contacts to database...`);
-      
-      if (contacts.length === 0) {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        return res.status(400).json({ message: "No contacts found in file. Make sure you have an 'Email' column." });
-      }
+      return { email, firstName, lastName };
+    };
 
-      const operations: any[] = contacts.map((c) => {
-        const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || undefined;
-        const updateData: any = {
-          $set: {
-            firstName: c.firstName ?? '',
-            lastName: c.lastName ?? '',
-            name: fullName
-          }
-        };
-        if (listId && mongoose.Types.ObjectId.isValid(listId)) {
-          updateData.$addToSet = { lists: new mongoose.Types.ObjectId(listId) };
+    const fileExtension = file.originalname.split('.').pop()?.toLowerCase();
+
+    if (file.mimetype === "text/csv" || fileExtension === 'csv') {
+      console.log("📄 Detected CSV format");
+      const stream = fs.createReadStream(filePath).pipe(csv());
+
+      for await (const data of stream) {
+        const { email, firstName, lastName } = getEmailAndNames(data);
+        if (email) {
+          contacts.push({ email, firstName, lastName });
         }
+      }
+      console.log(`✅ CSV processed. Found ${contacts.length} valid contacts.`);
+      await saveToDatabase(contacts, res, filePath, listId);
+    } else if (
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.mimetype === "application/vnd.ms-excel" ||
+      file.mimetype === "application/octet-stream" ||
+      ['xlsx', 'xls'].includes(fileExtension || '')
+    ) {
+      console.log("📊 Detected Excel format");
+      const workbook = xlsx.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]) as any[];
 
-        return {
-          updateOne: {
-            filter: { email: c.email },
-            update: updateData,
-            upsert: true,
-          },
-        };
+      console.log(`📝 Excel rows found: ${sheetData.length}`);
+
+      sheetData.forEach((row) => {
+        const { email, firstName, lastName } = getEmailAndNames(row);
+        if (email) {
+          contacts.push({ email, firstName, lastName });
+        }
       });
-  
-      await Contact.bulkWrite(operations);
-      console.log("💪 Bulk write completed successfully");
-  
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-  
-      res.json({
-        message: `Successfully uploaded ${contacts.length} contacts! ✅`,
-        count: contacts.length
-      });
-    } catch (error: any) {
-      console.error("❌ Database save error:", error);
+
+      console.log(`✅ Excel processed. Found ${contacts.length} valid contacts.`);
+      await saveToDatabase(contacts, res, filePath, listId);
+    } else {
+      console.error(`❌ Unsupported mimetype: ${file.mimetype}`);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      res.status(500).json({ message: "Failed to save contacts to database", error: error.message });
+      res.status(400).json({ message: `Format not supported (${file.mimetype}). Please use CSV or Excel (.xlsx).` });
     }
-  };
+  } catch (error: any) {
+    console.error("❌ Upload worker error:", error);
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    res.status(500).json({ message: "File processing failed", error: error.message });
+  }
+};
 
-  // get contact header fields
-  // GET Contact Fields (Dynamic Keys)
+// Helper function to save contacts
+const saveToDatabase = async (contacts: any[], res: Response, filePath: string, listId?: string) => {
+  try {
+    console.log(`💾 Saving ${contacts.length} contacts to database...`);
+
+    if (contacts.length === 0) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return res.status(400).json({ message: "No contacts found in file. Make sure you have an 'Email' column." });
+    }
+
+    const operations: any[] = contacts.map((c) => {
+      const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || undefined;
+      const updateData: any = {
+        $set: {
+          firstName: c.firstName ?? '',
+          lastName: c.lastName ?? '',
+          name: fullName
+        }
+      };
+      if (listId && mongoose.Types.ObjectId.isValid(listId)) {
+        updateData.$addToSet = { lists: new mongoose.Types.ObjectId(listId) };
+      }
+
+      return {
+        updateOne: {
+          filter: { email: c.email },
+          update: updateData,
+          upsert: true,
+        },
+      };
+    });
+
+    await Contact.bulkWrite(operations);
+    console.log("💪 Bulk write completed successfully");
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    res.json({
+      message: `Successfully uploaded ${contacts.length} contacts! ✅`,
+      count: contacts.length
+    });
+  } catch (error: any) {
+    console.error("❌ Database save error:", error);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    res.status(500).json({ message: "Failed to save contacts to database", error: error.message });
+  }
+};
+
+// get contact header fields
+// GET Contact Fields (Dynamic Keys)
 export const getContactFields = async (req: Request, res: Response) => {
   try {
     // 🔹 Only 1 document needed
@@ -365,7 +413,7 @@ export const getContactFields = async (req: Request, res: Response) => {
     }
 
     // ❌ Keys to exclude
-    const excludedKeys = ["_id", "__v", "lastName","createdAt","lists","name"]
+    const excludedKeys = ["_id", "__v", "lastName", "createdAt", "lists", "name"]
 
     // 🔹 Extract allowed keys
     const fields = Object.keys(contact).filter(
