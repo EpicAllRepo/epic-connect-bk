@@ -15,7 +15,7 @@ app.use(express.json());
 // Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000", "https://epicconnect.epicglobal.co.in"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
