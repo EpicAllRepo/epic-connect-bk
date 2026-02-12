@@ -8,11 +8,11 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     try {
         // 1. Basic Stats (Counts)
         const [
-            totalContacts, 
-            totalLists, 
-            totalCampaigns, 
-            sentEmails, 
-            scheduledEmails, 
+            totalContacts,
+            totalLists,
+            totalCampaigns,
+            sentEmails,
+            scheduledEmails,
             failedEmails
         ] = await Promise.all([
             Contact.countDocuments(),
@@ -24,22 +24,24 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         ]);
 
         // 2. Fetch Recent Data (Connecting other GET APIs logic)
-        
+
         // Fetch All Lists with Contact Counts (as done in listController)
-        const lists = await List.find().sort({ createdAt: -1 });
-        const listsWithCounts = await Promise.all(lists.map(async (list) => {
-            const contactCount = await Contact.countDocuments({ lists: list._id });
-            return {
-                ...list.toObject(),
-                contactCount
-            };
-        }));
+        // const lists = await List.find().sort({ createdAt: -1 });
+        // const listsWithCounts = await Promise.all(lists.map(async (list) => {
+        //     const contactCount = await Contact.countDocuments({ lists: list._id });
+        //     return {
+        //         ...list.toObject(),
+        //         contactCount
+        //     };
+        // }));
 
         // Fetch Recent 5 Campaigns
-        const recentCampaigns = await Campaign.find().sort({ createdAt: -1 }).limit(5);
+        const recentCampaign = await Campaign
+            .findOne()
+            .sort({ createdAt: -1 });
 
         // Fetch Recent 5 Contacts
-        const recentContacts = await Contact.find().populate('lists').sort({ createdAt: -1 }).limit(5);
+        // const recentContacts = await Contact.find().populate('lists').sort({ createdAt: -1 }).limit(5);
 
         // 3. Consolidate and Send Response
         res.json({
@@ -52,9 +54,9 @@ export const getDashboardStats = async (req: Request, res: Response) => {
                 failedEmails,
                 deliveredEmails: sentEmails // Basic mapping
             },
-            recentContacts: recentContacts,
-            recentCampaigns: recentCampaigns,
-            lists: listsWithCounts
+            // recentContacts: recentContacts,
+            recentCampaigns: recentCampaign,
+            // lists: listsWithCounts
         });
     } catch (err: any) {
         console.error("❌ Error in getDashboardStats:", err);
