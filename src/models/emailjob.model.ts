@@ -8,6 +8,9 @@ export interface IEmailJob extends Document {
   status: 'pending' | 'sent' | 'failed';
   sentAt?: Date;
   error?: string;
+  isDelivered?: boolean;
+  isOpened?: boolean;
+  isClicked?: boolean;
 }
 
 const EmailJobSchema: Schema = new Schema({
@@ -22,6 +25,9 @@ const EmailJobSchema: Schema = new Schema({
   },
   sentAt: { type: Date },
   error: { type: String },
+  isDelivered: { type: Boolean, default: false },
+  isOpened: { type: Boolean, default: false },
+  isClicked: { type: Boolean, default: false },
 });
 
 export default mongoose.model<IEmailJob>('EmailJob', EmailJobSchema);

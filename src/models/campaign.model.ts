@@ -12,9 +12,10 @@ export interface ICampaign extends Document {
   totalRecipients: number;
   stats: {
     sent: number;
+    delivered: number;
     opened: number;
     clicked: number;
-    bounced: number;
+    failed: number;
   };
   createdAt: Date;
 }
@@ -39,9 +40,10 @@ const CampaignSchema: Schema = new Schema({
   totalRecipients: { type: Number, default: 0 },
   stats: {
     sent: { type: Number, default: 0 },
+    delivered: { type: Number, default: 0 },
     opened: { type: Number, default: 0 },
     clicked: { type: Number, default: 0 },
-    bounced: { type: Number, default: 0 },
+    failed: { type: Number, default: 0 },
   },
   createdAt: { type: Date, default: Date.now }
 });

@@ -245,7 +245,11 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
             return res.status(404).json({ message: "Campaign not found" });
         }
 
-        // Get email job statistics
+        // Calculate Analytics
+        const stats = campaign.stats || { sent: 0, delivered: 0, opened: 0, clicked: 0, failed: 0 };
+        const totalRecipients = campaign.totalRecipients || 0;
+        
+        // Count job statuses for progress bar and backward compatibility
         const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
             EmailJob.countDocuments({ campaignId: id }),
             EmailJob.countDocuments({ campaignId: id, status: 'sent' }),
@@ -253,7 +257,15 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
             EmailJob.countDocuments({ campaignId: id, status: 'pending' })
         ]);
 
-        // Calculate progress percentage
+        // scheduled + sent + failed = totalRecipients (Precision for new Analytics)
+        const scheduled = Math.max(0, totalRecipients - (stats.sent + stats.failed));
+
+        // Calculated Rates
+        const deliveryRate = stats.sent > 0 ? ((stats.delivered / stats.sent) * 100).toFixed(1) : "0.0";
+        const openRate = stats.delivered > 0 ? ((stats.opened / stats.delivered) * 100).toFixed(1) : "0.0";
+        const clickRate = stats.opened > 0 ? ((stats.clicked / stats.opened) * 100).toFixed(1) : "0.0";
+
+        // Progress percentage for frontend
         const progress = totalJobs > 0 ? Math.round(((sentJobs + failedJobs) / totalJobs) * 100) : 0;
 
         res.json({
@@ -261,13 +273,29 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
                 id: campaign._id,
                 name: campaign.name,
                 status: campaign.status,
-                totalRecipients: campaign.totalRecipients || totalJobs,
+                totalRecipients: totalRecipients || totalJobs,
                 createdAt: campaign.createdAt
             },
+            // 🔹 For NEW Analytics Dashboard (As per screenshot)
+            analytics: {
+                totalRecipients,
+                scheduled,
+                sent: stats.sent,
+                delivered: stats.delivered,
+                opened: stats.opened,
+                clicked: stats.clicked,
+                failed: stats.failed,
+                rates: {
+                    deliveryRate: `${deliveryRate}%`,
+                    openRate: `${openRate}%`,
+                    clickRate: `${clickRate}%`
+                }
+            },
+            // 🔹 For OLD Frontend compatibility (Progress bar etc)
             emailStats: {
-                total: totalJobs,
+                total: totalRecipients || totalJobs,
                 sent: sentJobs,
-                draft: failedJobs,  // Failed emails shown as draft for retry
+                draft: failedJobs,
                 scheduled: pendingJobs,
                 progress: `${progress}%`
             },
@@ -275,5 +303,81 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
+    }
+};
+
+// 🔹 TRACK EMAIL OPEN
+export const trackOpen = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const job = await EmailJob.findById(jobId);
+
+        if (job && !job.isOpened) {
+            job.isOpened = true;
+            await job.save();
+
+            // Increment Campaign Opened Count
+            await Campaign.findByIdAndUpdate(job.campaignId, {
+                $inc: { 'stats.opened': 1 }
+            });
+        }
+
+        // Return a 1x1 transparent tracking pixel
+        const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+        res.writeHead(200, {
+            'Content-Type': 'image/gif',
+            'Content-Length': pixel.length,
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+        });
+        res.end(pixel);
+    } catch (err) {
+        res.status(500).end();
+    }
+};
+
+// 🔹 TRACK LINK CLICK
+export const trackClick = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const { url } = req.query;
+        
+        const job = await EmailJob.findById(jobId);
+
+        if (job && !job.isClicked) {
+            job.isClicked = true;
+            await job.save();
+
+            // Increment Campaign Clicked Count
+            await Campaign.findByIdAndUpdate(job.campaignId, {
+                $inc: { 'stats.clicked': 1 }
+            });
+        }
+
+        // Redirect to the original URL
+        res.redirect((url as string) || 'https://epicconnect.ai');
+    } catch (err) {
+        res.redirect('https://epicconnect.ai');
+    }
+};
+
+// 🔹 TRACK DELIVERY (Webhook Simulator)
+export const trackDelivery = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const job = await EmailJob.findById(jobId);
+
+        if (job && !job.isDelivered) {
+            job.isDelivered = true;
+            await job.save();
+
+            // Increment Campaign Delivered Count
+            await Campaign.findByIdAndUpdate(job.campaignId, {
+                $inc: { 'stats.delivered': 1 }
+            });
+        }
+
+        res.json({ success: true, message: "Delivery tracked" });
+    } catch (err) {
+        res.status(500).json({ success: false });
     }
 };
