@@ -92,7 +92,7 @@ const processQueue = async (): Promise<void> => {
 
                 const campaign = job.campaignId as unknown as ICampaign;
                 await Campaign.findByIdAndUpdate(campaign._id, {
-                    $inc: { 'stats.bounced': 1 }
+                    $inc: { 'stats.failed': 1 }
                 });
             }
         }

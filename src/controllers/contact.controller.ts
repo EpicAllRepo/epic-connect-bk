@@ -384,8 +384,28 @@ const saveToDatabase = async (
         lists: finalListIds,
       });
 
+<<<<<<< HEAD
       newContactIds.push(newContact._id.toString());
       addedCount++;
+=======
+    await Contact.bulkWrite(operations);
+    console.log("💪 Bulk write completed successfully");
+
+    // 🔗 Sync with List Model (if listId provided)
+    if (listId && mongoose.Types.ObjectId.isValid(listId)) {
+      const emails = contacts.map(c => c.email);
+      const updatedContacts = await Contact.find({ email: { $in: emails } }).select('_id');
+      const contactIds = updatedContacts.map(c => c._id);
+
+      await List.findByIdAndUpdate(listId, {
+        $addToSet: { contacts: { $each: contactIds } }
+      });
+      console.log(`🔗 Linked ${contactIds.length} contacts to list ${listId}`);
+    }
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+>>>>>>> e77b7c15c910eb1365cca36f320990395a06666d
     }
 
     // 🔹 Update Lists (ADD contacts to lists)
