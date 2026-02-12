@@ -352,66 +352,76 @@ export const uploadContacts = async (
 };
 
 // Helper function to save contacts
-const saveToDatabase = async (contacts: any[], res: Response, filePath: string, listId?: string) => {
+const saveToDatabase = async (
+  contacts: { email: string; firstName?: string; lastName?: string }[],
+  res: Response,
+  filePath: string,
+  listIds: string[] | string
+) => {
   try {
-    console.log(`💾 Saving ${contacts.length} contacts to database...`);
+    const finalListIds = Array.isArray(listIds)
+      ? listIds
+      : listIds
+      ? [listIds]
+      : [];
 
-    if (contacts.length === 0) {
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      return res.status(400).json({ message: "No contacts found in file. Make sure you have an 'Email' column." });
-    }
+    let addedCount = 0;
+    let duplicateCount = 0;
+    const duplicateEmails: string[] = [];
+    const newContactIds: string[] = [];
 
-    const operations: any[] = contacts.map((c) => {
-      const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || undefined;
-      const updateData: any = {
-        $set: {
-          firstName: c.firstName ?? '',
-          lastName: c.lastName ?? '',
-          name: fullName
-        }
-      };
-      if (listId && mongoose.Types.ObjectId.isValid(listId)) {
-        updateData.$addToSet = { lists: new mongoose.Types.ObjectId(listId) };
+    for (const contact of contacts) {
+      const existing = await Contact.findOne({ email: contact.email });
+
+      if (existing) {
+        duplicateCount++;
+        duplicateEmails.push(contact.email);
+        continue;
       }
 
-      return {
-        updateOne: {
-          filter: { email: c.email },
-          update: updateData,
-          upsert: true,
-        },
-      };
-    });
-
-    await Contact.bulkWrite(operations);
-    console.log("💪 Bulk write completed successfully");
-
-    // 🔗 Sync with List Model (if listId provided)
-    if (listId && mongoose.Types.ObjectId.isValid(listId)) {
-      const emails = contacts.map(c => c.email);
-      const updatedContacts = await Contact.find({ email: { $in: emails } }).select('_id');
-      const contactIds = updatedContacts.map(c => c._id);
-
-      await List.findByIdAndUpdate(listId, {
-        $addToSet: { contacts: { $each: contactIds } }
+      const newContact = await Contact.create({
+        ...contact,
+        lists: finalListIds,
       });
-      console.log(`🔗 Linked ${contactIds.length} contacts to list ${listId}`);
+
+      newContactIds.push(newContact._id.toString());
+      addedCount++;
     }
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // 🔹 Update Lists (ADD contacts to lists)
+    if (newContactIds.length > 0 && finalListIds.length > 0) {
+      await List.updateMany(
+        { _id: { $in: finalListIds } },
+        { $addToSet: { contacts: { $each: newContactIds } } }
+      );
     }
+
+    // Optional: update count field if you have it
+    if (finalListIds.length > 0) {
+      for (const listId of finalListIds) {
+        const count = await Contact.countDocuments({ lists: listId });
+        await List.findByIdAndUpdate(listId, { contactCount: count });
+      }
+    }
+
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     res.json({
-      message: `Successfully uploaded ${contacts.length} contacts! ✅`,
-      count: contacts.length
+      message: "Upload completed ✅",
+      addedCount,
+      duplicateCount,
+      duplicateEmails,
     });
   } catch (error: any) {
-    console.error("❌ Database save error:", error);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    res.status(500).json({ message: "Failed to save contacts to database", error: error.message });
+    res.status(500).json({
+      message: "Database save failed",
+      error: error.message,
+    });
   }
 };
+
+
 
 // get contact header fields
 // GET Contact Fields (Dynamic Keys)
