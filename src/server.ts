@@ -1,7 +1,8 @@
 import app from './app';
 import dotenv from 'dotenv';
 import connectDB from './config/db';
-import startEmailProcessor from './utils/emailProcessor';
+import { processEmails } from './utils/emailProcessor';
+// import startEmailProcessor from './utils/emailProcessor';
 
 // Load env vars
 dotenv.config();
@@ -10,7 +11,8 @@ dotenv.config();
 connectDB();
 
 // Start the Background Processor
-startEmailProcessor();
+// startEmailProcessor();
+processEmails()
 
 const PORT = process.env.PORT || 5000;
 
