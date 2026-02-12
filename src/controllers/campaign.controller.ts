@@ -72,7 +72,7 @@ export const getCampaigns = async (req: Request, res: Response) => {
       }
     });
 
-    /* 🔹 6. ATTACH BREAKDOWN TO CAMPAIGNS */
+    /* 🔹 6. ATTACH BREAKDOWN AND CLEAN STATS TO CAMPAIGNS */
     const campaignsWithStats = campaigns.map(campaign => {
       const breakdown =
         breakdownMap[campaign._id.toString()] || {
@@ -82,8 +82,24 @@ export const getCampaigns = async (req: Request, res: Response) => {
           draft: 0
         };
 
+      // 🔹 Ensure consistent analytics structure for the list view
+      const dbStats = campaign.stats || {};
+      const failed = dbStats.failed || (dbStats as any).bounced || 0;
+      const sent = dbStats.sent || 0;
+      const totalRecipients = campaign.totalRecipients || 0;
+
+      const cleanStats = {
+        sent,
+        delivered: dbStats.delivered || 0,
+        opened: dbStats.opened || 0,
+        clicked: dbStats.clicked || 0,
+        failed: failed,
+        scheduled: Math.max(0, totalRecipients - (sent + failed))
+      };
+
       return {
         ...campaign.toObject(),
+        stats: cleanStats, // 🚀 Override with clean/updated stats
         emailBreakdown: breakdown
       };
     });
