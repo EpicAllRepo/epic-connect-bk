@@ -57,7 +57,13 @@ const processQueue = async (): Promise<void> => {
                     personalizedBody = campaign.body;
                     personalizedSubject = campaign.subject;
                 }
-                // ----------------------------------------------------
+                
+                // --- DEBUG LOGS FOR PERSONALIZATION ---
+                console.log(`[PROCESSOR DEBUG] ----------------------------------`);
+                console.log(`[PROCESSOR DEBUG] To: ${job.email}`);
+                console.log(`[PROCESSOR DEBUG] Subject: ${personalizedSubject}`);
+                console.log(`[PROCESSOR DEBUG] Body: ${personalizedBody}`);
+                console.log(`[PROCESSOR DEBUG] ----------------------------------`);
                 
                 await transporter.sendMail({
                     from: `"${smtpConfig.fromName || 'Epic Connect'}" <${smtpConfig.fromEmail}>`,
@@ -75,7 +81,7 @@ const processQueue = async (): Promise<void> => {
                     $inc: { 'stats.sent': 1 }
                 });
 
-                console.log(`[EmailProcessor] Sent to ${job.email}`);
+                console.log(`[EmailProcessor] ✅ Mail successfully sent to ${job.email}`);
 
             } catch (err: any) {
                 console.error(`[EmailProcessor] Failed to send to ${job.email}:`, err.message);
