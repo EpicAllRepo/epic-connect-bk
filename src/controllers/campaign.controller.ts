@@ -326,6 +326,8 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
 export const trackOpen = async (req: Request, res: Response) => {
     try {
         const { jobId } = req.params;
+        console.log(`[TRACK] Open triggered for Job: ${jobId}`);
+        
         const job = await EmailJob.findById(jobId);
 
         if (job && !job.isOpened) {
@@ -333,9 +335,12 @@ export const trackOpen = async (req: Request, res: Response) => {
             await job.save();
 
             // Increment Campaign Opened Count
-            await Campaign.findByIdAndUpdate(job.campaignId, {
+            const updated = await Campaign.findByIdAndUpdate(job.campaignId, {
                 $inc: { 'stats.opened': 1 }
             });
+            console.log(`[TRACK] Campaign ${job.campaignId} stats updated: Opened +1`);
+        } else if (!job) {
+            console.warn(`[TRACK] Job not found: ${jobId}`);
         }
 
         // Return a 1x1 transparent tracking pixel
@@ -346,7 +351,8 @@ export const trackOpen = async (req: Request, res: Response) => {
             'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
         res.end(pixel);
-    } catch (err) {
+    } catch (err: any) {
+        console.error(`[TRACK ERROR] Open:`, err.message);
         res.status(500).end();
     }
 };
@@ -356,6 +362,7 @@ export const trackClick = async (req: Request, res: Response) => {
     try {
         const { jobId } = req.params;
         const { url } = req.query;
+        console.log(`[TRACK] Click triggered for Job: ${jobId}, URL: ${url}`);
         
         const job = await EmailJob.findById(jobId);
 
@@ -367,11 +374,13 @@ export const trackClick = async (req: Request, res: Response) => {
             await Campaign.findByIdAndUpdate(job.campaignId, {
                 $inc: { 'stats.clicked': 1 }
             });
+            console.log(`[TRACK] Campaign ${job.campaignId} stats updated: Clicked +1`);
         }
 
         // Redirect to the original URL
         res.redirect((url as string) || 'https://epicconnect.ai');
-    } catch (err) {
+    } catch (err: any) {
+        console.error(`[TRACK ERROR] Click:`, err.message);
         res.redirect('https://epicconnect.ai');
     }
 };
@@ -380,6 +389,8 @@ export const trackClick = async (req: Request, res: Response) => {
 export const trackDelivery = async (req: Request, res: Response) => {
     try {
         const { jobId } = req.params;
+        console.log(`[TRACK] Delivery triggered for Job: ${jobId}`);
+        
         const job = await EmailJob.findById(jobId);
 
         if (job && !job.isDelivered) {
@@ -390,10 +401,12 @@ export const trackDelivery = async (req: Request, res: Response) => {
             await Campaign.findByIdAndUpdate(job.campaignId, {
                 $inc: { 'stats.delivered': 1 }
             });
+            console.log(`[TRACK] Campaign ${job.campaignId} stats updated: Delivered +1`);
         }
 
         res.json({ success: true, message: "Delivery tracked" });
-    } catch (err) {
+    } catch (err: any) {
+        console.error(`[TRACK ERROR] Delivery:`, err.message);
         res.status(500).json({ success: false });
     }
 };
