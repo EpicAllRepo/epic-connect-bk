@@ -7,7 +7,10 @@ import mongoose from 'mongoose';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).user.userId;
+         const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
         // 1. Basic Stats (Counts)
         const [
             totalContacts,

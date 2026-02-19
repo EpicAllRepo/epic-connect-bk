@@ -5,11 +5,34 @@ import SMTP from "../models/smtp.model";
 import Campaign from "../models/campaign.model";
 import { personalizeMessage } from "./personalization";
 
+// ✅ NEW: Tracking inject function
+const BASE_URL = process.env.BASE_URL || "https://epicconnect.epicglobal.co.in";
+
+function injectTracking(htmlBody: string, jobId: string): string {
+  const trackingPixel = `<img src="${BASE_URL}/api/track/open/${jobId}" width="1" height="1" style="display:none;width:1px;height:1px;" />`;
+
+  // ✅ Agar plain text hai toh pehle basic HTML mein wrap karo
+  let html = htmlBody;
+  if (!htmlBody.trim().startsWith('<')) {
+    html = `<div>${htmlBody.replace(/\n/g, '<br/>')}</div>`;
+  }
+
+  // Rewrite links
+  const trackedBody = html.replace(
+    /href=["'](https?:\/\/[^"']+)["']/gi,
+    (match, url) => {
+      const encodedUrl = encodeURIComponent(url);
+      return `href="${BASE_URL}/api/track/click/${jobId}?url=${encodedUrl}"`;
+    }
+  );
+
+  return trackedBody + trackingPixel;
+}
+
 const processQueue = async (): Promise<void> => {
   try {
     const now = new Date();
 
-    // 🔹 1️⃣ Get all users who have pending emails ready to send
     const usersWithPendingJobs = await EmailJob.distinct("createdBy", {
       status: "pending",
       scheduledAt: { $lte: now }
@@ -17,11 +40,8 @@ const processQueue = async (): Promise<void> => {
 
     if (!usersWithPendingJobs.length) return;
 
-    console.log(
-      `[EmailProcessor] Found ${usersWithPendingJobs.length} users with pending jobs`
-    );
+    console.log(`[EmailProcessor] Found ${usersWithPendingJobs.length} users with pending jobs`);
 
-    // 🔹 2️⃣ Process per user (multi-tenant safe)
     for (const rawUserId of usersWithPendingJobs) {
       const userId = new mongoose.Types.ObjectId(rawUserId);
 
@@ -36,20 +56,12 @@ const processQueue = async (): Promise<void> => {
 
       if (!jobs.length) continue;
 
-      console.log(
-        `[EmailProcessor] Processing ${jobs.length} emails for user ${userId}`
-      );
+      console.log(`[EmailProcessor] Processing ${jobs.length} emails for user ${userId}`);
 
-      // 🔹 3️⃣ Load SMTP for this specific user
-      const smtpConfig = await SMTP.findOne({
-        createdBy: userId,
-        isDefault: true
-      });
+      const smtpConfig = await SMTP.findOne({ createdBy: userId, isDefault: true });
 
       if (!smtpConfig) {
-        console.error(
-          `[EmailProcessor] No SMTP configured for user ${userId}`
-        );
+        console.error(`[EmailProcessor] No SMTP configured for user ${userId}`);
         continue;
       }
 
@@ -65,7 +77,6 @@ const processQueue = async (): Promise<void> => {
 
       const processedCampaignIds = new Set<string>();
 
-      // 🔹 4️⃣ Send emails
       for (const job of jobs) {
         try {
           const campaign: any = job.campaignId;
@@ -82,94 +93,69 @@ const processQueue = async (): Promise<void> => {
           let personalizedSubject = campaign.subject;
 
           if (contact) {
-            personalizedBody = personalizeMessage(
-              campaign.body,
-              contact
-            );
-            personalizedSubject = personalizeMessage(
-              campaign.subject,
-              contact
-            );
+            personalizedBody = personalizeMessage(campaign.body, contact);
+            personalizedSubject = personalizeMessage(campaign.subject, contact);
           }
 
+          // ✅ NEW: Inject tracking into HTML body
+          const trackedHtmlBody = injectTracking(personalizedBody, String(job._id));
+
           await transporter.sendMail({
-            from: `"${smtpConfig.fromName || "Epic Connect"}" <${
-              smtpConfig.fromEmail
-            }>`,
+            from: `"${smtpConfig.fromName || "Epic Connect"}" <${smtpConfig.fromEmail}>`,
             to: job.email,
             subject: personalizedSubject,
-            text: personalizedBody,
-            html: personalizedBody
+            text: personalizedBody,       // plain text unchanged
+            html: trackedHtmlBody         // ✅ tracked HTML
           });
 
           job.status = "sent";
           job.sentAt = new Date();
+          // ✅ NEW: Mark delivered immediately after successful send
+          job.isDelivered = true;
           await job.save();
 
           await Campaign.updateOne(
             { _id: campaign._id, createdBy: userId },
-            { $inc: { "stats.sent": 1 } }
+            {
+              $inc: {
+                "stats.sent": 1,
+                "stats.delivered": 1   // ✅ NEW: Increment delivered too
+              }
+            }
           );
 
           processedCampaignIds.add(String(campaign._id));
+          console.log(`[EmailProcessor] ✅ Sent to ${job.email}`);
 
-          console.log(
-            `[EmailProcessor] ✅ Sent to ${job.email}`
-          );
         } catch (err: any) {
-          console.error(
-            `[EmailProcessor] ❌ Failed for ${job.email}:`,
-            err.message
-          );
+          console.error(`[EmailProcessor] ❌ Failed for ${job.email}:`, err.message);
 
           job.status = "failed";
           job.error = err.message;
           await job.save();
 
           const campaign: any = job.campaignId;
-
           if (campaign) {
             await Campaign.updateOne(
               { _id: campaign._id, createdBy: userId },
               { $inc: { "stats.failed": 1 } }
             );
-
             processedCampaignIds.add(String(campaign._id));
           }
         }
       }
 
-      // 🔹 5️⃣ Update Campaign Status Safely
+      // Campaign status update logic (unchanged)
       for (const campaignId of processedCampaignIds) {
-        const campaign = await Campaign.findOne({
-          _id: campaignId,
-          createdBy: userId
-        });
-
+        const campaign = await Campaign.findOne({ _id: campaignId, createdBy: userId });
         if (!campaign) continue;
 
-        const [totalJobs, sentJobs, failedJobs, pendingJobs] =
-          await Promise.all([
-            EmailJob.countDocuments({
-              campaignId,
-              createdBy: userId
-            }),
-            EmailJob.countDocuments({
-              campaignId,
-              createdBy: userId,
-              status: "sent"
-            }),
-            EmailJob.countDocuments({
-              campaignId,
-              createdBy: userId,
-              status: "failed"
-            }),
-            EmailJob.countDocuments({
-              campaignId,
-              createdBy: userId,
-              status: "pending"
-            })
-          ]);
+        const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
+          EmailJob.countDocuments({ campaignId, createdBy: userId }),
+          EmailJob.countDocuments({ campaignId, createdBy: userId, status: "sent" }),
+          EmailJob.countDocuments({ campaignId, createdBy: userId, status: "failed" }),
+          EmailJob.countDocuments({ campaignId, createdBy: userId, status: "pending" })
+        ]);
 
         let newStatus = campaign.status;
 
@@ -179,10 +165,7 @@ const processQueue = async (): Promise<void> => {
           newStatus = "sent";
         } else if (failedJobs === totalJobs && totalJobs > 0) {
           newStatus = "draft";
-        } else if (
-          sentJobs > 0 &&
-          sentJobs + failedJobs === totalJobs
-        ) {
+        } else if (sentJobs > 0 && sentJobs + failedJobs === totalJobs) {
           newStatus = "sent";
         }
 
@@ -191,10 +174,7 @@ const processQueue = async (): Promise<void> => {
             { _id: campaignId, createdBy: userId },
             { status: newStatus }
           );
-
-          console.log(
-            `[EmailProcessor] Campaign ${campaign.name} → ${newStatus}`
-          );
+          console.log(`[EmailProcessor] Campaign ${campaign.name} → ${newStatus}`);
         }
       }
     }

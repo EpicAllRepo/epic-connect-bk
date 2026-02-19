@@ -5,7 +5,10 @@ import mongoose from 'mongoose';
 
 // GET All Lists
 export const getLists = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }; // Get user ID from auth middleware
   try {
     console.log("🔍 Fetching all lists and their contact counts...");
     const lists = await List.find({
@@ -37,7 +40,10 @@ export const getLists = async (req: Request, res: Response) => {
 // GET Single List by ID
 export const getListById = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     const list = await List.findOne({
       _id: req.params.id,
       createdBy: userId
@@ -49,7 +55,7 @@ export const getListById = async (req: Request, res: Response) => {
       lists: list._id,
       createdBy: userId
     });
-    const contactCount = await Contact.countDocuments({ lists: list._id, createdBy: (req as any).user.id });
+    const contactCount = await Contact.countDocuments({ lists: list._id, createdBy: req.user?.userId });
 
     res.json({
       ...list.toObject(),
@@ -63,7 +69,11 @@ export const getListById = async (req: Request, res: Response) => {
 
 // POST Create List
 export const createList = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  const userId = req.user?.userId;
+ 
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }; // Get user ID from auth middleware
   // console.log("REQ.USER =>", (req as any).user);
   // console.log("USER ID =>", (req as any).user?.id);
   try {
@@ -77,7 +87,10 @@ export const createList = async (req: Request, res: Response) => {
 
 // PUT Update List
 export const updateList = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId; // Get user ID from auth middleware
+   const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }; // Get user ID from auth middleware
   console.log("Updating list with ID:", req.params.id, "for user ID:", userId);
   try {
     const { name, description } = req.body;
@@ -98,7 +111,10 @@ export const updateList = async (req: Request, res: Response) => {
 
 // DELETE List
 export const deleteList = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId; // Get user ID from auth middleware
+   const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }; // Get user ID from auth middleware
   try {
     const list = await List.findByIdAndDelete({
       _id: req.params.id,
@@ -118,7 +134,11 @@ export const assignContactToList = async (
 ): Promise<void> => {
   try {
     let { contactIds, listIds } = req.body;
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return; 
+    }
 
     // Validate arrays
     if (!Array.isArray(contactIds) || !Array.isArray(listIds)) {

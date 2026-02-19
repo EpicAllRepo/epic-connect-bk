@@ -4,7 +4,10 @@ import SMTP from '../models/smtp.model';
 
 // GET SMTP Config
 export const getSMTPConfig = async (req: Request, res: Response) => {
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     try {
         const config = await SMTP.findOne({
             createdBy: userId
@@ -18,7 +21,10 @@ export const getSMTPConfig = async (req: Request, res: Response) => {
 
 // POST Create SMTP Config
 export const saveSMTPConfig = async (req: Request, res: Response) => {
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     try {
         const { host, port, user, pass, fromEmail, fromName } = req.body;
 
@@ -41,8 +47,11 @@ export const saveSMTPConfig = async (req: Request, res: Response) => {
 
 // PUT Update SMTP Config
 export const updateSMTPConfig = async (req: Request, res: Response) => {
-    const userId = (req as any).user.userId;
-    const userRole = (req as any).user.role;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
+    const userRole = req.user?.role;
     let config;
     try {
         const { host, port, user, pass, fromEmail, fromName } = req.body;

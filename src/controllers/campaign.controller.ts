@@ -3,6 +3,8 @@ import Campaign from '../models/campaign.model';
 import Contact, { IContact } from '../models/contact.model';
 import EmailJob, { IEmailJob } from '../models/emailjob.model';
 import mongoose from 'mongoose';
+import SMTP from '../models/smtp.model';
+
 
 
 export const getCampaigns = async (req: Request, res: Response) => {
@@ -11,7 +13,10 @@ export const getCampaigns = async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 5;
     const skip = (page - 1) * limit;
-    const userId = (req as any).user.userId; // Assuming req.user is set by auth middleware
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    } // Assuming req.user is set by auth middleware
 
     /* 🔹 2. TOTAL CAMPAIGNS COUNT */
     const totalItems = await Campaign.countDocuments({
@@ -164,7 +169,19 @@ export const getCampaigns = async (req: Request, res: Response) => {
 export const createCampaign = async (req: Request, res: Response) => {
   try {
     const { name, subject, body, listIds, contactIds, intervalMinutes } = req.body;
-    const userId = (req as any).user.userId;
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
+
+    const smtp = await SMTP.findOne({ createdBy: userId });
+    if (!smtp || !smtp.host || !smtp.user || !smtp.pass) {
+      return res.status(400).json({
+        success: false,
+        code: "SMTP_NOT_CONFIGURED",
+        message: "Please confirm your SMTP settings before creating a campaign."
+      });
+    }
 
     // 1. Create the Campaign (status will be updated by emailProcessor)
     const campaign = await Campaign.create({
@@ -225,7 +242,7 @@ export const createCampaign = async (req: Request, res: Response) => {
         email: contact.email,
         scheduledAt: scheduledAt,
         status: 'pending',
-        createdBy: userId
+        createdBy: new mongoose.Types.ObjectId(userId)
       });
     });
 
@@ -254,7 +271,10 @@ export const deleteCampaign = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const userId = (req as any).user.userId;
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
 
     // 1. Delete associated email jobs
     await EmailJob.deleteMany({ campaignId: id, createdBy: userId });
@@ -278,7 +298,10 @@ export const deleteCampaign = async (req: Request, res: Response) => {
 export const getCampaignStatus = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = (req as any).user.userId;
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     const campaign = await Campaign.findOne({
       _id: id,
       createdBy: userId

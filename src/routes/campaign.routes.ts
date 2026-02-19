@@ -3,6 +3,11 @@ import { createCampaign, getCampaigns, deleteCampaign, getCampaignStatus, trackO
 import { verifyToken, authorizeRoles } from "../middlewares/auth.middleware";
 const router = express.Router();
 
+// Tracking Routes
+router.get('/track/open/:jobId', trackOpen);
+router.get('/track/click/:jobId', trackClick);
+router.post('/track/delivery/:jobId', trackDelivery);
+
 router.use(verifyToken);
 router.use(authorizeRoles(["admin"]));
 
@@ -11,9 +16,6 @@ router.post('/', createCampaign);
 router.get('/:id/status', getCampaignStatus);
 router.delete('/:id', deleteCampaign);
 
-// Tracking Routes
-router.get('/track/open/:jobId', trackOpen);
-router.get('/track/click/:jobId', trackClick);
-router.post('/track/delivery/:jobId', trackDelivery);
+
 
 export default router;

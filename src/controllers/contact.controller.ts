@@ -13,7 +13,10 @@ export const getContacts = async (req: Request, res: Response) => {
     const limit = Number(req.query.limit) || 10;
 
     const skip = (page - 1) * limit;
-    const userId = (req as any).user.userId;
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
 
     const total = await Contact.countDocuments({
       createdBy: userId
@@ -44,7 +47,10 @@ export const getContacts = async (req: Request, res: Response) => {
 
 // GET Single Contact
 export const getContactById = async (req: Request, res: Response) => {
-  const userId = (req as any).user.userId;
+   const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
   try {
     const contact = await Contact.findOne({
       _id: req.params.id,
@@ -78,7 +84,10 @@ export const createContact = async (req: Request, res: Response) => {
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     // 1️⃣ Check duplicate
     const exists = await Contact.findOne({
       email,
@@ -137,7 +146,10 @@ export const importContacts = async (req: Request, res: Response) => {
     }
 
     const normalized = contacts.map((c: any) => {
-      const userId = (req as any).user.userId;
+       const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
       const { firstName, lastName, name } = toFirstLastName({
         name: c.name,
         firstName: c.firstName,
@@ -173,7 +185,10 @@ export const updateContact = async (req: Request, res: Response) => {
   try {
     const { email, name, firstName, lastName, lists } = req.body
     const contactId = req.params.id
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
 
     // 🔹 existing contact
     const existingContact = await Contact.findOne({
@@ -234,7 +249,10 @@ export const deleteContacts = async (req: Request, res: Response) => {
   try {
     const { ids } = req.body || {};
     const { id } = req.query;
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
 
     // 🔴 SINGLE DELETE (query param)
     if (id && typeof id === "string") {
@@ -462,7 +480,10 @@ const saveToDatabase = async (
 // GET Contact Fields (Dynamic Keys)
 export const getContactFields = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
     // 🔹 Only 1 document needed
     const contact = await Contact.findOne({
       createdBy: userId

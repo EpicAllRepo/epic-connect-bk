@@ -3,8 +3,11 @@ import EmailJob from '../models/emailjob.model';
 
 // GET All Sent Emails (History)
 export const getSentEmails = async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
-    const userRole = (req as any).user.role;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
+    const userRole = req.user?.role;
 
     try {
         const { campaignId, page = 1, limit = 50 } = req.query;
@@ -39,8 +42,11 @@ export const getSentEmails = async (req: Request, res: Response) => {
 
 // DELETE Sent History Item
 export const deleteSentHistory = async (req: Request, res: Response) => {
-    const userId = (req as any).user.id;
-    const userRole = (req as any).user.role;
+     const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    };
+    const userRole = req.user?.role;
     let job;
     try {
         if (userRole === 'superadmin') {
