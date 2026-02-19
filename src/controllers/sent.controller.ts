@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import EmailJob from '../models/emailjob.model';
 
-// GET All Sent Emails (History)
 export const getSentEmails = async (req: Request, res: Response) => {
      const userId = req.user?.userId;
     if (!userId) {
@@ -40,7 +39,6 @@ export const getSentEmails = async (req: Request, res: Response) => {
     }
 };
 
-// DELETE Sent History Item
 export const deleteSentHistory = async (req: Request, res: Response) => {
      const userId = req.user?.userId;
     if (!userId) {

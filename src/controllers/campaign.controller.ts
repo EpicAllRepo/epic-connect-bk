@@ -165,8 +165,6 @@ export const getCampaigns = async (req: Request, res: Response) => {
   }
 };
 
-
-
 export const createCampaign = async (req: Request, res: Response) => {
   try {
     const { name, subject, body, listIds, contactIds, intervalMinutes } = req.body;

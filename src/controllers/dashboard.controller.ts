@@ -45,10 +45,6 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             .findOne({ createdBy: new mongoose.Types.ObjectId(userId) })
             .sort({ createdAt: -1 });
 
-        // Fetch Recent 5 Contacts
-        // const recentContacts = await Contact.find().populate('lists').sort({ createdAt: -1 }).limit(5);
-
-        // 3. Consolidate and Send Response
         res.json({
             stats: {
                 totalContacts,

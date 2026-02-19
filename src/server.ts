@@ -15,7 +15,7 @@ connectDB();
 // Start Background Email Processor
 startEmailProcessor();
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8001;
 
 /* 🔥 Create HTTP Server */
 const server = http.createServer(app);

@@ -12,6 +12,7 @@ const generateOTP = () => {
 
 // 🔹 LOGIN (Send OTP)
 export const loginUser = async (req: Request, res: Response) => {
+  console.log("LOGIN REQUEST 👉", req.body);
   try {
     const { email } = req.body;
 
@@ -38,9 +39,13 @@ export const loginUser = async (req: Request, res: Response) => {
     return res.json({
       message: "OTP sent successfully",
     });
-  } catch (error) {
-    return res.status(500).json({ message: "Server error" });
-  }
+  } catch (error: any) {
+  console.error("LOGIN ERROR 👉", error);
+  return res.status(500).json({
+    message: error.message || "Server error",
+  });
+}
+
 };
 
 
