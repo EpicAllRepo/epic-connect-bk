@@ -5,87 +5,110 @@ import mongoose from 'mongoose';
 
 // GET All Lists
 export const getLists = async (req: Request, res: Response) => {
-    try {
-        console.log("🔍 Fetching all lists and their contact counts...");
-        const lists = await List.find().sort({ createdAt: -1 });
-        
-        // Use Promise.all to fetch counts for each list in parallel
-        const listsWithCounts = await Promise.all(lists.map(async (list) => {
-            const contactCount = await Contact.countDocuments({ 
-                lists: list._id 
-            });
-            
-            console.log(`   - List "${list.name}" (${list._id}) has ${contactCount} contacts.`);
-            
-            return {
-                ...list.toObject(),
-                contactCount
-            };
-        }));
+  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  try {
+    console.log("🔍 Fetching all lists and their contact counts...");
+    const lists = await List.find({
+      createdBy: userId
+    }).sort({ createdAt: -1 });
 
-        res.json(listsWithCounts);
-    } catch (err: any) {
-        console.error("❌ Error in getLists:", err);
-        res.status(500).json({ message: err.message });
-    }
+    // Use Promise.all to fetch counts for each list in parallel
+    const listsWithCounts = await Promise.all(lists.map(async (list) => {
+      const contactCount = await Contact.countDocuments({
+        lists: list._id,
+        createdBy: userId
+      });
+
+      console.log(`   - List "${list.name}" (${list._id}) has ${contactCount} contacts.`);
+
+      return {
+        ...list.toObject(),
+        contactCount
+      };
+    }));
+
+    res.json(listsWithCounts);
+  } catch (err: any) {
+    console.error("❌ Error in getLists:", err);
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // GET Single List by ID
 export const getListById = async (req: Request, res: Response) => {
-    try {
-        const list = await List.findById(req.params.id);
-        if (!list) return res.status(404).json({ message: 'List not found' });
-        
-        // Fetch contacts that have this list explicitly assigned
-        const contacts = await Contact.find({ lists: list._id });
-        const contactCount = await Contact.countDocuments({ lists: list._id });
-        
-        res.json({
-            ...list.toObject(),
-            contactCount,
-            contacts // Return the actual contacts from the Contact collection
-        });
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
-    }
+  try {
+    const userId = (req as any).user.userId;
+    const list = await List.findOne({
+      _id: req.params.id,
+      createdBy: userId
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+
+    // Fetch contacts that have this list explicitly assigned
+    const contacts = await Contact.find({
+      lists: list._id,
+      createdBy: userId
+    });
+    const contactCount = await Contact.countDocuments({ lists: list._id, createdBy: (req as any).user.id });
+
+    res.json({
+      ...list.toObject(),
+      contactCount,
+      contacts // Return the actual contacts from the Contact collection
+    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // POST Create List
 export const createList = async (req: Request, res: Response) => {
-    try {
-        const { name, description } = req.body;
-        const newList = await List.create({ name, description });
-        res.status(201).json(newList);
-    } catch (err: any) {
-        res.status(400).json({ message: err.message });
-    }
+  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  // console.log("REQ.USER =>", (req as any).user);
+  // console.log("USER ID =>", (req as any).user?.id);
+  try {
+    const { name, description } = req.body;
+    const newList = await List.create({ name, description, createdBy: userId });
+    res.status(201).json(newList);
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
+  }
 };
 
 // PUT Update List
 export const updateList = async (req: Request, res: Response) => {
-    try {
-        const { name, description } = req.body;
-        const list = await List.findByIdAndUpdate(
-            req.params.id,
-            { name, description },
-            { new: true }
-        );
-        if (!list) return res.status(404).json({ message: 'List not found' });
-        res.json(list);
-    } catch (err: any) {
-        res.status(400).json({ message: err.message });
-    }
+  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  console.log("Updating list with ID:", req.params.id, "for user ID:", userId);
+  try {
+    const { name, description } = req.body;
+    const list = await List.findByIdAndUpdate(
+      {
+        _id: req.params.id,
+        createdBy: userId
+      },
+      { name, description },
+      { new: true }
+    );
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    res.json(list);
+  } catch (err: any) {
+    res.status(400).json({ message: err.message });
+  }
 };
 
 // DELETE List
 export const deleteList = async (req: Request, res: Response) => {
-    try {
-        const list = await List.findByIdAndDelete(req.params.id);
-        if (!list) return res.status(404).json({ message: 'List not found' });
-        res.json({ message: 'List deleted successfully' });
-    } catch (err: any) {
-        res.status(500).json({ message: err.message });
-    }
+  const userId = (req as any).user.userId; // Get user ID from auth middleware
+  try {
+    const list = await List.findByIdAndDelete({
+      _id: req.params.id,
+      createdBy: userId
+    });
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    res.json({ message: 'List deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 
@@ -95,6 +118,7 @@ export const assignContactToList = async (
 ): Promise<void> => {
   try {
     let { contactIds, listIds } = req.body;
+    const userId = (req as any).user.userId;
 
     // Validate arrays
     if (!Array.isArray(contactIds) || !Array.isArray(listIds)) {
@@ -121,7 +145,10 @@ export const assignContactToList = async (
 
     // 🔹 Loop each contact for proper sync
     for (const contactId of validContactIds) {
-      const contact = await Contact.findById(contactId);
+      const contact = await Contact.findOne({
+        _id: contactId,
+        createdBy: userId
+      });
 
       if (!contact) continue;
 
@@ -140,7 +167,7 @@ export const assignContactToList = async (
       // Add
       if (listsToAdd.length > 0) {
         await List.updateMany(
-          { _id: { $in: listsToAdd } },
+          { _id: { $in: listsToAdd }, createdBy: userId },
           { $addToSet: { contacts: contactId } }
         );
       }
@@ -148,7 +175,7 @@ export const assignContactToList = async (
       // Remove
       if (listsToRemove.length > 0) {
         await List.updateMany(
-          { _id: { $in: listsToRemove } },
+          { _id: { $in: listsToRemove }, createdBy: userId },
           { $pull: { contacts: contactId } }
         );
       }

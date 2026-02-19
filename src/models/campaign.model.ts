@@ -10,6 +10,7 @@ export interface ICampaign extends Document {
   startTime: Date;
   intervalMinutes: number;
   totalRecipients: number;
+  createdBy: mongoose.Types.ObjectId;
   stats: {
     sent: number;
     delivered: number;
@@ -23,6 +24,11 @@ export interface ICampaign extends Document {
 const CampaignSchema: Schema = new Schema({
   name: { type: String, required: true },
   subject: { type: String, required: true },
+  createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
   body: { type: String, required: true },
   lists: [{ type: mongoose.Schema.Types.ObjectId, ref: 'List' }],
   status: { 

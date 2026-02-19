@@ -6,6 +6,7 @@ import listRoutes from './routes/list.routes';
 import smtpRoutes from './routes/smtp.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import sentRoutes from './routes/sent.routes';
+import authRoutes from './routes/auth.routes';
 
 
 const app = express();
@@ -23,6 +24,7 @@ app.use(
 );
 
 // Routes
+app.use("/api/auth", authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/lists', listRoutes);

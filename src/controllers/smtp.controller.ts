@@ -4,8 +4,11 @@ import SMTP from '../models/smtp.model';
 
 // GET SMTP Config
 export const getSMTPConfig = async (req: Request, res: Response) => {
+    const userId = (req as any).user.userId;
     try {
-        const config = await SMTP.findOne({ isDefault: true });
+        const config = await SMTP.findOne({
+            createdBy: userId
+        });
         if (!config) return res.json({ message: 'No configuration found' });
         res.json(config);
     } catch (err: any) {
@@ -15,16 +18,19 @@ export const getSMTPConfig = async (req: Request, res: Response) => {
 
 // POST Create SMTP Config
 export const saveSMTPConfig = async (req: Request, res: Response) => {
+    const userId = (req as any).user.userId;
     try {
         const { host, port, user, pass, fromEmail, fromName } = req.body;
 
-        const existingConfig = await SMTP.findOne({ isDefault: true });
+        const existingConfig = await SMTP.findOne({
+            createdBy: userId
+        });
         if (existingConfig) {
             return res.status(400).json({ message: 'SMTP configuration already exists. Use PUT to update.' });
         }
 
         const config = await SMTP.create({
-            host, port, user, pass, fromEmail, fromName, isDefault: true
+            host, port, user, pass, fromEmail, fromName, isDefault: true, createdBy: userId
         });
 
         res.status(201).json({ message: 'SMTP Configuration saved successfully', config });
@@ -35,6 +41,9 @@ export const saveSMTPConfig = async (req: Request, res: Response) => {
 
 // PUT Update SMTP Config
 export const updateSMTPConfig = async (req: Request, res: Response) => {
+    const userId = (req as any).user.userId;
+    const userRole = (req as any).user.role;
+    let config;
     try {
         const { host, port, user, pass, fromEmail, fromName } = req.body;
         const { id } = req.params;
@@ -45,7 +54,14 @@ export const updateSMTPConfig = async (req: Request, res: Response) => {
         }
 
         // 2. Find data by this ID
-        let config = await SMTP.findById(id);
+        if (userRole === 'superadmin') {
+            config = await SMTP.findById(id);
+        } else {
+            config = await SMTP.findOne({
+                _id: id,
+                createdBy: userId
+            });
+        }
 
         // 3. If NOT found, refuse (mana kar dena)
         if (!config) {
@@ -57,7 +73,7 @@ export const updateSMTPConfig = async (req: Request, res: Response) => {
         if (port) config.port = port;
         if (user) config.user = user;
         if (pass) {
-            const cleanPass = pass.replace(/\s/g, ''); 
+            const cleanPass = pass.replace(/\s/g, '');
             config.pass = cleanPass;
         }
         if (fromEmail) config.fromEmail = fromEmail;

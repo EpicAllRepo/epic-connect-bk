@@ -1,7 +1,10 @@
 import express from 'express';
 import { createCampaign, getCampaigns, deleteCampaign, getCampaignStatus, trackOpen, trackClick, trackDelivery } from '../controllers/campaign.controller';
-
+import { verifyToken, authorizeRoles } from "../middlewares/auth.middleware";
 const router = express.Router();
+
+router.use(verifyToken);
+router.use(authorizeRoles(["admin"]));
 
 router.get('/', getCampaigns);
 router.post('/', createCampaign);

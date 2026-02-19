@@ -9,10 +9,13 @@ import {
 } from '../controllers/list.controller';
 import { validate } from "../middlewares/validate";
 import { body } from "express-validator";
+import { verifyToken, authorizeRoles } from "../middlewares/auth.middleware";
 
 
 
 const router = express.Router();
+router.use(verifyToken);
+router.use(authorizeRoles(["admin"]));
 
 router.get('/', getLists);
 router.get('/:id', getListById);

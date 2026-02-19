@@ -13,10 +13,15 @@ export const getContacts = async (req: Request, res: Response) => {
     const limit = Number(req.query.limit) || 10;
 
     const skip = (page - 1) * limit;
+    const userId = (req as any).user.userId;
 
-    const total = await Contact.countDocuments();
+    const total = await Contact.countDocuments({
+      createdBy: userId
+    });
 
-    const contacts = await Contact.find()
+    const contacts = await Contact.find({
+      createdBy: userId
+    })
       .select("firstName lastName email phone lists createdAt updatedAt")
       .populate("lists", "name")
       .sort({ updatedAt: -1, createdAt: -1 })
@@ -39,8 +44,12 @@ export const getContacts = async (req: Request, res: Response) => {
 
 // GET Single Contact
 export const getContactById = async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
   try {
-    const contact = await Contact.findById(req.params.id).populate('lists');
+    const contact = await Contact.findOne({
+      _id: req.params.id,
+      createdBy: userId
+    }).populate('lists');
     if (!contact) return res.status(404).json({ message: 'Contact not found' });
     res.json(contact);
   } catch (err: any) {
@@ -69,9 +78,12 @@ export const createContact = async (req: Request, res: Response) => {
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
-
+    const userId = (req as any).user.userId;
     // 1️⃣ Check duplicate
-    const exists = await Contact.findOne({ email });
+    const exists = await Contact.findOne({
+      email,
+      createdBy: userId
+    });
     if (exists) {
       return res
         .status(400)
@@ -91,18 +103,15 @@ export const createContact = async (req: Request, res: Response) => {
       firstName: fn,
       lastName: ln,
       name: fullName,
-      lists: listIds
+      lists: listIds,
+      createdBy: userId
     });
 
     // 4️⃣ 🔥 IMPORTANT: Update Lists collection
     if (listIds.length > 0) {
       await List.updateMany(
-        { _id: { $in: listIds } },
-        {
-          $addToSet: {
-            contacts: newContact._id
-          }
-        }
+        { _id: { $in: listIds }, createdBy: userId },
+        { $addToSet: { contacts: newContact._id } }
       );
     }
 
@@ -128,6 +137,7 @@ export const importContacts = async (req: Request, res: Response) => {
     }
 
     const normalized = contacts.map((c: any) => {
+      const userId = (req as any).user.userId;
       const { firstName, lastName, name } = toFirstLastName({
         name: c.name,
         firstName: c.firstName,
@@ -138,7 +148,12 @@ export const importContacts = async (req: Request, res: Response) => {
         firstName,
         lastName,
         name: name || undefined,
-        lists: Array.isArray(c.lists) ? c.lists : []
+        lists: Array.isArray(c.lists)
+          ? (c.lists as string[]).filter((id: string) =>
+            mongoose.Types.ObjectId.isValid(id)
+          )
+          : [],
+        createdBy: userId
       };
     });
 
@@ -158,9 +173,13 @@ export const updateContact = async (req: Request, res: Response) => {
   try {
     const { email, name, firstName, lastName, lists } = req.body
     const contactId = req.params.id
+    const userId = (req as any).user.userId;
 
     // 🔹 existing contact
-    const existingContact = await Contact.findById(contactId)
+    const existingContact = await Contact.findOne({
+      _id: contactId,
+      createdBy: userId
+    });
     if (!existingContact) {
       return res.status(404).json({ message: "Contact not found" })
     }
@@ -188,7 +207,7 @@ export const updateContact = async (req: Request, res: Response) => {
 
     if (removedLists.length) {
       await List.updateMany(
-        { _id: { $in: removedLists } },
+        { _id: { $in: removedLists }, createdBy: userId },
         { $pull: { contacts: contactId } }
       )
     }
@@ -198,7 +217,7 @@ export const updateContact = async (req: Request, res: Response) => {
 
     if (addedLists.length) {
       await List.updateMany(
-        { _id: { $in: addedLists } },
+        { _id: { $in: addedLists }, createdBy: userId },
         { $addToSet: { contacts: contactId } } // duplicate safe
       )
     }
@@ -215,10 +234,14 @@ export const deleteContacts = async (req: Request, res: Response) => {
   try {
     const { ids } = req.body || {};
     const { id } = req.query;
+    const userId = (req as any).user.userId;
 
     // 🔴 SINGLE DELETE (query param)
     if (id && typeof id === "string") {
-      const deleted = await Contact.findByIdAndDelete(id);
+      const deleted = await Contact.findOneAndDelete({
+        _id: id,
+        createdBy: userId
+      });
 
       if (!deleted) {
         return res.status(404).json({ message: "Contact not found" });
@@ -229,7 +252,7 @@ export const deleteContacts = async (req: Request, res: Response) => {
 
     // 🔵 BULK DELETE (body)
     if (ids && Array.isArray(ids) && ids.length > 0) {
-      await Contact.deleteMany({ _id: { $in: ids } });
+      await Contact.deleteMany({ _id: { $in: ids }, createdBy: userId });
 
       return res.json({
         message: `${ids.length} contacts deleted successfully`,
@@ -359,11 +382,12 @@ const saveToDatabase = async (
   listIds: string[] | string
 ) => {
   try {
+    const userId = (res.req as any).user.userId;
     const finalListIds = Array.isArray(listIds)
       ? listIds
       : listIds
-      ? [listIds]
-      : [];
+        ? [listIds]
+        : [];
 
     let addedCount = 0;
     let duplicateCount = 0;
@@ -371,7 +395,7 @@ const saveToDatabase = async (
     const newContactIds: string[] = [];
 
     for (const contact of contacts) {
-      const existing = await Contact.findOne({ email: contact.email });
+      const existing = await Contact.findOne({ email: contact.email, createdBy: userId });
 
       if (existing) {
         duplicateCount++;
@@ -382,6 +406,7 @@ const saveToDatabase = async (
       const newContact = await Contact.create({
         ...contact,
         lists: finalListIds,
+        createdBy: userId
       });
 
       newContactIds.push(newContact._id.toString());
@@ -391,7 +416,10 @@ const saveToDatabase = async (
     // 🔹 Update Lists (ADD contacts to lists)
     if (newContactIds.length > 0 && finalListIds.length > 0) {
       await List.updateMany(
-        { _id: { $in: finalListIds } },
+        {
+          _id: { $in: finalListIds },
+          createdBy: userId
+        },
         { $addToSet: { contacts: { $each: newContactIds } } }
       );
     }
@@ -399,8 +427,15 @@ const saveToDatabase = async (
     // Optional: update count field if you have it
     if (finalListIds.length > 0) {
       for (const listId of finalListIds) {
-        const count = await Contact.countDocuments({ lists: listId });
-        await List.findByIdAndUpdate(listId, { contactCount: count });
+        const count = await Contact.countDocuments({
+          lists: listId,
+          createdBy: userId
+        });
+
+        await List.findOneAndUpdate(
+          { _id: listId, createdBy: userId },
+          { contactCount: count }
+        );
       }
     }
 
@@ -427,8 +462,11 @@ const saveToDatabase = async (
 // GET Contact Fields (Dynamic Keys)
 export const getContactFields = async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).user.userId;
     // 🔹 Only 1 document needed
-    const contact = await Contact.findOne().lean()
+    const contact = await Contact.findOne({
+      createdBy: userId
+    }).lean();
 
     if (!contact) {
       return res.json({ fields: [] })

@@ -7,18 +7,28 @@ export interface IContact extends Document {
   firstName: string;
   lastName: string;
   lists: mongoose.Types.ObjectId[];
+  createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
 }
 
 const ContactSchema: Schema = new Schema({
-  email: { type: String, required: true, unique: true, trim: true },
+  email: { type: String, required: true, trim: true },
   name: { type: String },
   firstName: { type: String, default: '' },
   lastName: { type: String, default: '' },
   lists: [{ type: mongoose.Schema.Types.ObjectId, ref: 'List' }],
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
   createdAt: { type: Date, default: Date.now }
 },
-{timestamps: true}
+  { timestamps: true }
+);
+ContactSchema.index(
+  { email: 1, createdBy: 1 },
+  { unique: true }
 );
 
 // Backward compatibility: purane contacts jinke paas sirf "name" hai,

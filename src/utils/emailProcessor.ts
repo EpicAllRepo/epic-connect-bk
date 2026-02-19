@@ -1,150 +1,211 @@
-import nodemailer from 'nodemailer';
-import EmailJob, { IEmailJob } from '../models/emailjob.model';
-import SMTP, { ISMTP } from '../models/smtp.model';
-import Campaign, { ICampaign } from '../models/campaign.model';
-import { personalizeMessage } from './personalization';
+import nodemailer from "nodemailer";
+import mongoose from "mongoose";
+import EmailJob from "../models/emailjob.model";
+import SMTP from "../models/smtp.model";
+import Campaign from "../models/campaign.model";
+import { personalizeMessage } from "./personalization";
 
 const processQueue = async (): Promise<void> => {
-    try {
-        // 1. Find jobs that are ready to be sent
-        const jobs = await EmailJob.find({
-            status: 'pending',
-            scheduledAt: { $lte: new Date() }
-        })
-        .populate('campaignId')
-        .populate('contactId') // Need contact details for personalization
+  try {
+    const now = new Date();
+
+    // 🔹 1️⃣ Get all users who have pending emails ready to send
+    const usersWithPendingJobs = await EmailJob.distinct("createdBy", {
+      status: "pending",
+      scheduledAt: { $lte: now }
+    });
+
+    if (!usersWithPendingJobs.length) return;
+
+    console.log(
+      `[EmailProcessor] Found ${usersWithPendingJobs.length} users with pending jobs`
+    );
+
+    // 🔹 2️⃣ Process per user (multi-tenant safe)
+    for (const rawUserId of usersWithPendingJobs) {
+      const userId = new mongoose.Types.ObjectId(rawUserId);
+
+      const jobs = await EmailJob.find({
+        status: "pending",
+        scheduledAt: { $lte: now },
+        createdBy: userId
+      })
+        .populate("campaignId")
+        .populate("contactId")
         .limit(50);
 
-        if (jobs.length === 0) return;
+      if (!jobs.length) continue;
 
-        console.log(`[EmailProcessor] Found ${jobs.length} emails due for sending.`);
+      console.log(
+        `[EmailProcessor] Processing ${jobs.length} emails for user ${userId}`
+      );
 
-        // 2. Get SMTP Configuration
-        const smtpConfig = await SMTP.findOne({ isDefault: true });
-        if (!smtpConfig) {
-            console.error("[EmailProcessor] No SMTP Config found. Please configure SMTP.");
-            return;
+      // 🔹 3️⃣ Load SMTP for this specific user
+      const smtpConfig = await SMTP.findOne({
+        createdBy: userId,
+        isDefault: true
+      });
+
+      if (!smtpConfig) {
+        console.error(
+          `[EmailProcessor] No SMTP configured for user ${userId}`
+        );
+        continue;
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.port === 465,
+        auth: {
+          user: smtpConfig.user,
+          pass: smtpConfig.pass
         }
+      });
 
-        // 3. Create Transporter
-        console.log(`[PROCESSOR DEBUG] Using Host: ${smtpConfig.host}, User: ${smtpConfig.user}`);
-        const transporter = nodemailer.createTransport({
-            host: smtpConfig.host,
-            port: smtpConfig.port,
-            secure: smtpConfig.port === 465,
-            auth: {
-                user: smtpConfig.user,
-                pass: smtpConfig.pass
-            }
+      const processedCampaignIds = new Set<string>();
+
+      // 🔹 4️⃣ Send emails
+      for (const job of jobs) {
+        try {
+          const campaign: any = job.campaignId;
+          const contact: any = job.contactId;
+
+          if (!campaign) {
+            job.status = "failed";
+            job.error = "Campaign not found";
+            await job.save();
+            continue;
+          }
+
+          let personalizedBody = campaign.body;
+          let personalizedSubject = campaign.subject;
+
+          if (contact) {
+            personalizedBody = personalizeMessage(
+              campaign.body,
+              contact
+            );
+            personalizedSubject = personalizeMessage(
+              campaign.subject,
+              contact
+            );
+          }
+
+          await transporter.sendMail({
+            from: `"${smtpConfig.fromName || "Epic Connect"}" <${
+              smtpConfig.fromEmail
+            }>`,
+            to: job.email,
+            subject: personalizedSubject,
+            text: personalizedBody,
+            html: personalizedBody
+          });
+
+          job.status = "sent";
+          job.sentAt = new Date();
+          await job.save();
+
+          await Campaign.updateOne(
+            { _id: campaign._id, createdBy: userId },
+            { $inc: { "stats.sent": 1 } }
+          );
+
+          processedCampaignIds.add(String(campaign._id));
+
+          console.log(
+            `[EmailProcessor] ✅ Sent to ${job.email}`
+          );
+        } catch (err: any) {
+          console.error(
+            `[EmailProcessor] ❌ Failed for ${job.email}:`,
+            err.message
+          );
+
+          job.status = "failed";
+          job.error = err.message;
+          await job.save();
+
+          const campaign: any = job.campaignId;
+
+          if (campaign) {
+            await Campaign.updateOne(
+              { _id: campaign._id, createdBy: userId },
+              { $inc: { "stats.failed": 1 } }
+            );
+
+            processedCampaignIds.add(String(campaign._id));
+          }
+        }
+      }
+
+      // 🔹 5️⃣ Update Campaign Status Safely
+      for (const campaignId of processedCampaignIds) {
+        const campaign = await Campaign.findOne({
+          _id: campaignId,
+          createdBy: userId
         });
 
-        // 4. Send Emails
-        for (const job of jobs) {
-            try {
-                // Type assertion for populated campaignId
-                // In a real app we might want more robust type checking here
-                const campaign = job.campaignId as unknown as ICampaign;
-                const contact = job.contactId as any; // Populated contact
+        if (!campaign) continue;
 
-                // --- Personalization Logic (Replace {{name}} etc) ---
-                let personalizedBody: string;
-                let personalizedSubject: string;
+        const [totalJobs, sentJobs, failedJobs, pendingJobs] =
+          await Promise.all([
+            EmailJob.countDocuments({
+              campaignId,
+              createdBy: userId
+            }),
+            EmailJob.countDocuments({
+              campaignId,
+              createdBy: userId,
+              status: "sent"
+            }),
+            EmailJob.countDocuments({
+              campaignId,
+              createdBy: userId,
+              status: "failed"
+            }),
+            EmailJob.countDocuments({
+              campaignId,
+              createdBy: userId,
+              status: "pending"
+            })
+          ]);
 
-                if (contact) {
-                    personalizedBody = personalizeMessage(campaign.body, contact as any);
-                    personalizedSubject = personalizeMessage(campaign.subject, contact as any);
-                } else {
-                    personalizedBody = campaign.body;
-                    personalizedSubject = campaign.subject;
-                }
-                
-                // --- DEBUG LOGS FOR PERSONALIZATION ---
-                console.log(`[PROCESSOR DEBUG] ----------------------------------`);
-                console.log(`[PROCESSOR DEBUG] To: ${job.email}`);
-                console.log(`[PROCESSOR DEBUG] Subject: ${personalizedSubject}`);
-                console.log(`[PROCESSOR DEBUG] Body: ${personalizedBody}`);
-                console.log(`[PROCESSOR DEBUG] ----------------------------------`);
-                
-                await transporter.sendMail({
-                    from: `"${smtpConfig.fromName || 'Epic Connect'}" <${smtpConfig.fromEmail}>`,
-                    to: job.email,
-                    subject: personalizedSubject,
-                    text: personalizedBody, // Fallback
-                    html: personalizedBody  // Use HTML for rich text
-                });
+        let newStatus = campaign.status;
 
-                job.status = 'sent';
-                job.sentAt = new Date();
-                await job.save();
-
-                await Campaign.findByIdAndUpdate(campaign._id, {
-                    $inc: { 'stats.sent': 1 }
-                });
-
-                console.log(`[EmailProcessor] ✅ Mail successfully sent to ${job.email}`);
-
-            } catch (err: any) {
-                console.error(`[EmailProcessor] Failed to send to ${job.email}:`, err.message);
-                
-                job.status = 'failed';
-                job.error = err.message;
-                await job.save();
-
-                const campaign = job.campaignId as unknown as ICampaign;
-                await Campaign.findByIdAndUpdate(campaign._id, {
-                    $inc: { 'stats.failed': 1 }
-                });
-            }
+        if (pendingJobs > 0) {
+          newStatus = "processing";
+        } else if (sentJobs === totalJobs && totalJobs > 0) {
+          newStatus = "sent";
+        } else if (failedJobs === totalJobs && totalJobs > 0) {
+          newStatus = "draft";
+        } else if (
+          sentJobs > 0 &&
+          sentJobs + failedJobs === totalJobs
+        ) {
+          newStatus = "sent";
         }
 
-        // 5. Update Campaign Status based on results
-        // Get all unique campaign IDs from processed jobs
-        const campaignIds = [...new Set(jobs.map(j => String((j.campaignId as any)._id)))];
-        
-        for (const campaignId of campaignIds) {
-            const campaign = await Campaign.findById(campaignId);
-            if (!campaign) continue;
+        if (newStatus !== campaign.status) {
+          await Campaign.updateOne(
+            { _id: campaignId, createdBy: userId },
+            { status: newStatus }
+          );
 
-            // Count email job statuses for this campaign
-            const [totalJobs, sentJobs, failedJobs, pendingJobs] = await Promise.all([
-                EmailJob.countDocuments({ campaignId }),
-                EmailJob.countDocuments({ campaignId, status: 'sent' }),
-                EmailJob.countDocuments({ campaignId, status: 'failed' }),
-                EmailJob.countDocuments({ campaignId, status: 'pending' })
-            ]);
-
-            // Update campaign status based on job results
-            let newStatus = campaign.status;
-
-            if (pendingJobs > 0) {
-                // Still has pending jobs - mark as processing
-                newStatus = 'processing';
-            } else if (sentJobs === totalJobs) {
-                // All emails sent successfully
-                newStatus = 'sent';
-            } else if (failedJobs === totalJobs) {
-                // All emails failed - move to draft for retry
-                newStatus = 'draft';
-            } else if (sentJobs > 0 && (sentJobs + failedJobs) === totalJobs) {
-                // Some sent, some failed - mark as sent (partial success)
-                newStatus = 'sent';
-            }
-
-            // Only update if status changed
-            if (newStatus !== campaign.status) {
-                await Campaign.findByIdAndUpdate(campaignId, { status: newStatus });
-                console.log(`[EmailProcessor] Campaign ${campaign.name} status updated: ${campaign.status} → ${newStatus}`);
-            }
+          console.log(
+            `[EmailProcessor] Campaign ${campaign.name} → ${newStatus}`
+          );
         }
-
-    } catch (error) {
-        console.error("[EmailProcessor] Critical Error:", error);
+      }
     }
+  } catch (error) {
+    console.error("[EmailProcessor] Critical Error:", error);
+  }
 };
 
 const startProcessor = (): void => {
-    console.log("Starting Email Background Processor...");
-    setInterval(processQueue, 20 * 1000);
+  console.log("🚀 Starting Multi-Tenant Email Processor...");
+  setInterval(processQueue, 20 * 1000);
 };
 
 export default startProcessor;

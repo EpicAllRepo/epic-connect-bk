@@ -3,9 +3,11 @@ import Campaign from '../models/campaign.model';
 import Contact from '../models/contact.model';
 import List from '../models/list.model';
 import EmailJob from '../models/emailjob.model';
+import mongoose from 'mongoose';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
     try {
+        const userId = (req as any).user.userId;
         // 1. Basic Stats (Counts)
         const [
             totalContacts,
@@ -15,12 +17,12 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             scheduledEmails,
             failedEmails
         ] = await Promise.all([
-            Contact.countDocuments(),
-            List.countDocuments(),
-            Campaign.countDocuments(),
-            EmailJob.countDocuments({ status: 'sent' }),
-            EmailJob.countDocuments({ status: 'pending' }),
-            EmailJob.countDocuments({ status: 'failed' })
+            Contact.countDocuments({ createdBy: userId }),
+            List.countDocuments({ createdBy: userId }),
+            Campaign.countDocuments({ createdBy: userId }),
+            EmailJob.countDocuments({ status: 'sent', createdBy: userId }),
+            EmailJob.countDocuments({ status: 'pending', createdBy: userId }),
+            EmailJob.countDocuments({ status: 'failed', createdBy: userId })
         ]);
 
         // 2. Fetch Recent Data (Connecting other GET APIs logic)
@@ -37,7 +39,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
 
         // Fetch Recent 5 Campaigns
         const recentCampaign = await Campaign
-            .findOne()
+            .findOne({ createdBy: new mongoose.Types.ObjectId(userId) })
             .sort({ createdAt: -1 });
 
         // Fetch Recent 5 Contacts

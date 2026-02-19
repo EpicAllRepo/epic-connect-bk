@@ -3,9 +3,15 @@ import EmailJob from '../models/emailjob.model';
 
 // GET All Sent Emails (History)
 export const getSentEmails = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const userRole = (req as any).user.role;
+
     try {
         const { campaignId, page = 1, limit = 50 } = req.query;
         const query: any = { status: 'sent' };
+        if (userRole !== 'superadmin') {
+            query.createdBy = userId;
+        }
 
         if (campaignId) {
             query.campaignId = campaignId;
@@ -33,8 +39,18 @@ export const getSentEmails = async (req: Request, res: Response) => {
 
 // DELETE Sent History Item
 export const deleteSentHistory = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const userRole = (req as any).user.role;
+    let job;
     try {
-        const job = await EmailJob.findByIdAndDelete(req.params.id);
+        if (userRole === 'superadmin') {
+            job = await EmailJob.findByIdAndDelete(req.params.id);
+        } else {
+            job = await EmailJob.findOneAndDelete({
+                _id: req.params.id,
+                createdBy: userId
+            });
+        }
         if (!job) return res.status(404).json({ message: 'History record not found' });
         res.json({ message: 'Sent history record deleted successfully' });
     } catch (err: any) {

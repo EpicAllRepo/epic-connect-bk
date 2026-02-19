@@ -11,8 +11,12 @@ import {
     getContactFields,
     deleteContacts,
 } from '../controllers/contact.controller';
+import { verifyToken, authorizeRoles } from "../middlewares/auth.middleware";
+
 
 const router = express.Router();
+router.use(verifyToken);
+router.use(authorizeRoles(["admin"]));
 const upload = multer({ dest: 'uploads/' });
 
 router.get('/', getContacts);
