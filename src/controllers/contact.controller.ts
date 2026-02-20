@@ -249,42 +249,69 @@ export const deleteContacts = async (req: Request, res: Response) => {
   try {
     const { ids } = req.body || {};
     const { id } = req.query;
-     const userId = req.user?.userId;
+    const userId = req.user?.userId;
+
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
-    };
+    }
 
-    // 🔴 SINGLE DELETE (query param)
+    let contactIds: string[] = [];
+
+    // 🔴 SINGLE DELETE
     if (id && typeof id === "string") {
-      const deleted = await Contact.findOneAndDelete({
-        _id: id,
-        createdBy: userId
-      });
-
-      if (!deleted) {
-        return res.status(404).json({ message: "Contact not found" });
-      }
-
-      return res.json({ message: "Contact deleted successfully" });
+      contactIds = [id];
     }
 
-    // 🔵 BULK DELETE (body)
+    // 🔵 BULK DELETE
     if (ids && Array.isArray(ids) && ids.length > 0) {
-      await Contact.deleteMany({ _id: { $in: ids }, createdBy: userId });
-
-      return res.json({
-        message: `${ids.length} contacts deleted successfully`,
-      });
+      contactIds = ids;
     }
 
-    return res.status(400).json({
-      message: "No id or ids provided",
+    if (contactIds.length === 0) {
+      return res.status(400).json({ message: "No id or ids provided" });
+    }
+
+    // 1️⃣ Find contacts before deleting (to know their lists)
+    const contacts = await Contact.find({
+      _id: { $in: contactIds },
+      createdBy: userId,
+    });
+
+    if (!contacts.length) {
+      return res.status(404).json({ message: "Contact(s) not found" });
+    }
+
+    // 2️⃣ Collect list IDs
+    const listIds = contacts.flatMap((c) => c.lists.map(String));
+
+    // 3️⃣ Delete contacts
+    await Contact.deleteMany({
+      _id: { $in: contactIds },
+      createdBy: userId,
+    });
+
+    // 4️⃣ Remove contacts from Lists
+    if (listIds.length > 0) {
+      await List.updateMany(
+        {
+          _id: { $in: listIds },
+          createdBy: userId,
+        },
+        {
+          $pull: { contacts: { $in: contactIds } },
+        }
+      );
+    }
+
+    res.json({
+      message: `${contactIds.length} contact(s) deleted successfully ✅`,
     });
   } catch (err: any) {
     console.error("Delete error:", err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 
 
