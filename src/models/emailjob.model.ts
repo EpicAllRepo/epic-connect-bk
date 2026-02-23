@@ -10,6 +10,8 @@ export interface IEmailJob extends Document {
   sentAt?: Date;
   error?: string;
   isDelivered?: boolean;
+  openedAt?: Date;
+  clickedAt?: Date;
   isOpened?: boolean;
   isClicked?: boolean;
 }
@@ -32,6 +34,14 @@ const EmailJobSchema: Schema = new Schema({
   sentAt: { type: Date },
   error: { type: String },
   isDelivered: { type: Boolean, default: false },
+  openedAt: {
+    type: Date,
+    default: null,
+  },
+  clickedAt: {
+    type: Date,
+    default: null,
+  },
   isOpened: { type: Boolean, default: false },
   isClicked: { type: Boolean, default: false },
 });

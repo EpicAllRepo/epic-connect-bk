@@ -4,6 +4,7 @@ import Contact, { IContact } from '../models/contact.model';
 import EmailJob, { IEmailJob } from '../models/emailjob.model';
 import mongoose from 'mongoose';
 import SMTP from '../models/smtp.model';
+import { io } from "../server";
 
 
 
@@ -253,6 +254,10 @@ export const createCampaign = async (req: Request, res: Response) => {
     await Campaign.findByIdAndUpdate(campaign._id, {
       totalRecipients: uniqueContacts.length
     });
+    io.to(userId.toString()).emit("campaignUpdated", {
+      campaignId: campaign._id,
+      type: "created"
+    });
 
     res.status(201).json({
       success: true,
@@ -375,33 +380,38 @@ export const getCampaignStatus = async (req: Request, res: Response) => {
 export const trackOpen = async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
-    console.log(`[TRACK] Open triggered for Job: ${jobId}`);
 
     const job = await EmailJob.findById(jobId);
+    if (!job) return res.status(404).end();
 
-    if (job && !job.isOpened) {
+    if (!job.isOpened) {
       job.isOpened = true;
+      job.openedAt = new Date();
       await job.save();
 
-      // Increment Campaign Opened Count
-      const updated = await Campaign.findByIdAndUpdate(job.campaignId, {
-        $inc: { 'stats.opened': 1 }
+      await Campaign.updateOne(
+        { _id: job.campaignId },
+        { $inc: { "stats.opened": 1 } }
+      );
+
+      // ✅ SOCKET EMIT
+      io.to(String(job.createdBy)).emit("campaignStatsUpdated", {
+        campaignId: String(job.campaignId),
+        type: "opened"
       });
-      console.log(`[TRACK] Campaign ${job.campaignId} stats updated: Opened +1`);
-    } else if (!job) {
-      console.warn(`[TRACK] Job not found: ${jobId}`);
     }
 
-    // Return a 1x1 transparent tracking pixel
-    const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-    res.writeHead(200, {
-      'Content-Type': 'image/gif',
-      'Content-Length': pixel.length,
-      'Cache-Control': 'no-cache, no-store, must-revalidate'
-    });
+    const pixel = Buffer.from(
+      "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      "base64"
+    );
+
+    res.setHeader("Content-Type", "image/gif");
+    res.setHeader("Content-Length", pixel.length);
     res.end(pixel);
+
   } catch (err: any) {
-    console.error(`[TRACK ERROR] Open:`, err.message);
+    console.error("Track open error:", err.message);
     res.status(500).end();
   }
 };
@@ -411,26 +421,35 @@ export const trackClick = async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
     const { url } = req.query;
-    console.log(`[TRACK] Click triggered for Job: ${jobId}, URL: ${url}`);
 
     const job = await EmailJob.findById(jobId);
+    if (!job) return res.redirect(process.env.CLIENT_URL || "/");
 
-    if (job && !job.isClicked) {
+    if (!job.isClicked) {
       job.isClicked = true;
+      job.clickedAt = new Date();
       await job.save();
 
-      // Increment Campaign Clicked Count
-      await Campaign.findByIdAndUpdate(job.campaignId, {
-        $inc: { 'stats.clicked': 1 }
+      await Campaign.updateOne(
+        { _id: job.campaignId },
+        { $inc: { "stats.clicked": 1 } }
+      );
+
+      io.to(String(job.createdBy)).emit("campaignStatsUpdated", {
+        campaignId: String(job.campaignId),
+        type: "clicked"
       });
-      console.log(`[TRACK] Campaign ${job.campaignId} stats updated: Clicked +1`);
     }
 
-    // Redirect to the original URL
-    res.redirect((url as string) || 'https://epicconnect.ai');
+    const redirectUrl = url
+      ? decodeURIComponent(url as string)
+      : process.env.CLIENT_URL || "/";
+
+    return res.redirect(redirectUrl);
+
   } catch (err: any) {
-    console.error(`[TRACK ERROR] Click:`, err.message);
-    res.redirect('https://epicconnect.ai');
+    console.error("Track click error:", err.message);
+    return res.redirect(process.env.CLIENT_URL || "/");
   }
 };
 

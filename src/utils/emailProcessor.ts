@@ -4,6 +4,7 @@ import EmailJob from "../models/emailjob.model";
 import SMTP from "../models/smtp.model";
 import Campaign from "../models/campaign.model";
 import { personalizeMessage } from "./personalization";
+import { io } from "../server";
 
 // ✅ NEW: Tracking inject function
 const BASE_URL = process.env.BASE_URL || "https://epicconnect.epicglobal.co.in";
@@ -123,6 +124,10 @@ const processQueue = async (): Promise<void> => {
               }
             }
           );
+          io.to(String(userId)).emit("campaignStatsUpdated", {
+            campaignId: String(campaign._id),
+            type: "sent"
+          });
 
           processedCampaignIds.add(String(campaign._id));
           console.log(`[EmailProcessor] ✅ Sent to ${job.email}`);
@@ -140,6 +145,10 @@ const processQueue = async (): Promise<void> => {
               { _id: campaign._id, createdBy: userId },
               { $inc: { "stats.failed": 1 } }
             );
+            io.to(String(userId)).emit("campaignStatsUpdated", {
+              campaignId: String(campaign._id),
+              type: "failed"
+            });
             processedCampaignIds.add(String(campaign._id));
           }
         }
@@ -174,6 +183,10 @@ const processQueue = async (): Promise<void> => {
             { _id: campaignId, createdBy: userId },
             { status: newStatus }
           );
+          io.to(String(userId)).emit("campaignStatusChanged", {
+            campaignId: String(campaignId),
+            status: newStatus
+          });
           console.log(`[EmailProcessor] Campaign ${campaign.name} → ${newStatus}`);
         }
       }

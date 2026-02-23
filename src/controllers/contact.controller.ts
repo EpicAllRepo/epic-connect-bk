@@ -521,7 +521,7 @@ export const getContactFields = async (req: Request, res: Response) => {
     }
 
     // ❌ Keys to exclude
-    const excludedKeys = ["_id", "__v", "lastName", "createdAt", "lists", "name", "updatedAt"] // firstName/lastName/name are derived from each other, so we can exclude them to avoid confusion
+    const excludedKeys = ["_id", "__v", "lastName", "createdAt", "lists", "name", "updatedAt", "createdBy"] // firstName/lastName/name are derived from each other, so we can exclude them to avoid confusion
 
     // 🔹 Extract allowed keys
     const fields = Object.keys(contact).filter(
