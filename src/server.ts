@@ -3,7 +3,7 @@ import app from "./app";
 import dotenv from "dotenv";
 import connectDB from "./config/db";
 import startEmailProcessor from "./utils/emailProcessor";
-import { Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 
 // Load env vars
@@ -29,7 +29,7 @@ export const io = new Server(server, {
 });
 
 /* 🔐 Socket Authentication */
-io.use((socket, next) => {
+io.use((socket: Socket, next: (err?: Error) => void) => {
   try {
     const token = socket.handshake.auth.token;
 
@@ -47,7 +47,7 @@ io.use((socket, next) => {
 });
 
 /* 🔥 On Connection */
-io.on("connection", (socket) => {
+io.on("connection", (socket: Socket) => {
   const userId = socket.data.userId;
 
   console.log("⚡ Socket connected:", userId);

@@ -4,7 +4,7 @@ import Contact, { IContact } from '../models/contact.model';
 import EmailJob, { IEmailJob } from '../models/emailjob.model';
 import mongoose from 'mongoose';
 import SMTP from '../models/smtp.model';
-import { io } from "../server";
+import { io} from "../server";
 
 
 
