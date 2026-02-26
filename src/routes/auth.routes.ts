@@ -4,7 +4,9 @@ import {
     verifyOtp,
     createAdmin,
     getAllAdmins,
-    deleteAdmin
+    deleteAdmin,
+    refreshAccessToken,
+    logoutUser
 } from "../controllers/auth.controller";
 import { verifyToken, authorizeRoles } from "../middlewares/auth.middleware";
 
@@ -33,5 +35,7 @@ router.post(
   authorizeRoles(["superAdmin"]),
   createAdmin
 );
+router.post("/refresh", refreshAccessToken);
+router.post("/logout", logoutUser);
 
 export default router;

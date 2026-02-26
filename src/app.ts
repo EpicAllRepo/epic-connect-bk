@@ -7,11 +7,13 @@ import smtpRoutes from './routes/smtp.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import sentRoutes from './routes/sent.routes';
 import authRoutes from './routes/auth.routes';
+import cookieParser from "cookie-parser";
 
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
 app.use(

@@ -40,14 +40,12 @@ export const loginUser = async (req: Request, res: Response) => {
       message: "OTP sent successfully",
     });
   } catch (error: any) {
-  console.error("LOGIN ERROR 👉", error);
-  return res.status(500).json({
-    message: error.message || "Server error",
-  });
-}
-
+    console.error("LOGIN ERROR 👉", error);
+    return res.status(500).json({
+      message: error.message || "Server error",
+    });
+  }
 };
-
 
 // 🔹 VERIFY OTP
 export const verifyOtp = async (req: Request, res: Response) => {
@@ -75,17 +73,52 @@ export const verifyOtp = async (req: Request, res: Response) => {
     user.otpExpiry = undefined;
     await user.save();
 
-    const token = jwt.sign(
+    // Access Token (2 min)
+    const accessToken = jwt.sign(
       {
         userId: user._id,
         role: user.role,
       },
       process.env.JWT_SECRET as string,
-      { expiresIn: "1d" }
+      { expiresIn: "2m" }
     );
 
+    // Refresh Token (7 days)
+    const refreshToken = jwt.sign(
+      {
+        userId: user._id,
+      },
+      process.env.JWT_REFRESH_SECRET as string,
+      { expiresIn: "7d" }
+    );
+
+    // ✅ Pehle purane sare tokens clear karo
+    res.clearCookie("refreshToken", { path: "/" });
+    res.clearCookie("refreshToken", { path: "/api" });
+    res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+    res.clearCookie("accessToken", { path: "/" });
+    res.clearCookie("accessToken", { path: "/api" });
+
+    // ✅ Access Token cookie
+    res.cookie("accessToken", accessToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 2 * 60 * 1000, // 2 min
+    });
+
+    // ✅ Refresh Token cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.json({
-      token,
+      accessToken,
       role: user.role,
       email: user.email,
     });
@@ -94,6 +127,80 @@ export const verifyOtp = async (req: Request, res: Response) => {
   }
 };
 
+// 🔹 REFRESH ACCESS TOKEN
+// 🔹 REFRESH ACCESS TOKEN (with rotation)
+export const refreshAccessToken = async (req: Request, res: Response) => {
+  try {
+    const token = req.cookies.refreshToken;
+
+    console.log("🔥 All cookies:", req.cookies); // ← Dekho kaun sa token aa raha hai
+
+    if (!token) {
+      return res.status(401).json({ message: "No refresh token" });
+    }
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_REFRESH_SECRET as string
+    ) as any;
+
+    console.log("🔥 Decoded userId:", decoded.userId); // ← userId check karo
+
+    const user = await User.findById(decoded.userId);
+
+    console.log("🔥 User found:", user?.email); // ← Sahi user aa raha hai?
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // ✅ Naya Access Token
+    const newAccessToken = jwt.sign(
+      {
+        userId: user._id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "2m" }
+    );
+
+    // ✅ Naya Refresh Token bhi banao (Token Rotation)
+    const newRefreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_REFRESH_SECRET as string,
+      { expiresIn: "7d" }
+    );
+
+    // ✅ Purana refreshToken clear karo - sare paths se
+    res.clearCookie("refreshToken", { path: "/" });
+    res.clearCookie("refreshToken", { path: "/api" });
+    res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+
+    // ✅ Naya refreshToken set karo
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // ✅ Naya accessToken cookie bhi update karo
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 2 * 60 * 1000,
+    });
+
+    return res.json({ accessToken: newAccessToken });
+  } catch (error) {
+    res.clearCookie("refreshToken", { path: "/" });
+    res.clearCookie("refreshToken", { path: "/api" });
+    return res.status(401).json({ message: "Invalid refresh token" });
+  }
+};
 
 // 🔹 CREATE ADMIN (Only SuperAdmin)
 export const createAdmin = async (req: Request, res: Response) => {
@@ -132,6 +239,7 @@ export const getAllAdmins = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
 export const deleteAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -148,4 +256,11 @@ export const deleteAdmin = async (req: Request, res: Response) => {
   } catch (error) {
     return res.status(500).json({ message: "Server error" });
   }
+};
+
+// 🔹 LOGOUT
+export const logoutUser = async (req: Request, res: Response) => {
+  res.clearCookie("accessToken", { path: "/" });
+  res.clearCookie("refreshToken", { path: "/" });
+  return res.json({ message: "Logged out successfully" });
 };
