@@ -7,21 +7,26 @@ import { personalizeMessage } from "./personalization";
 import { io } from "../server";
 
 // ✅ NEW: Tracking inject function
-const BASE_URL = process.env.BASE_URL || "https://epicconnect.epicglobal.co.in";
+const BASE_URL = process.env.BASE_URL || "http://localhost:5001";
 
 function injectTracking(htmlBody: string, jobId: string): string {
   const trackingPixel = `<img src="${BASE_URL}/api/track/open/${jobId}" width="1" height="1" style="display:none;width:1px;height:1px;" />`;
 
-  // ✅ Agar plain text hai toh pehle basic HTML mein wrap karo
   let html = htmlBody;
   if (!htmlBody.trim().startsWith('<')) {
     html = `<div>${htmlBody.replace(/\n/g, '<br/>')}</div>`;
   }
 
-  // Rewrite links
+  // ✅ Skip domains
+  const skipDomains = ['wa.me', 'whatsapp.com', 'tel:', 'mailto:'];
+
   const trackedBody = html.replace(
     /href=["'](https?:\/\/[^"']+)["']/gi,
     (match, url) => {
+      // ✅ Yeh sirf add kiya hai
+      if (skipDomains.some(domain => url.includes(domain))) {
+        return match;
+      }
       const encodedUrl = encodeURIComponent(url);
       return `href="${BASE_URL}/api/track/click/${jobId}?url=${encodedUrl}"`;
     }

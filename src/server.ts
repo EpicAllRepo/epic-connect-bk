@@ -5,6 +5,7 @@ import connectDB from "./config/db";
 import startEmailProcessor from "./utils/emailProcessor";
 import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
+import * as cookie from "cookie";
 
 // Load env vars
 dotenv.config();
@@ -15,7 +16,7 @@ connectDB();
 // Start Background Email Processor
 startEmailProcessor();
 
-const PORT = process.env.PORT || 8001;
+const PORT = process.env.PORT || 5001;
 
 /* 🔥 Create HTTP Server */
 const server = http.createServer(app);
@@ -23,15 +24,23 @@ const server = http.createServer(app);
 /* 🔥 Setup Socket.IO */
 export const io = new Server(server, {
   cors: {
-    origin: process.env.BASE_URL || "http://localhost:3000",
-    credentials: true,
-  },
+    origin: true,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
 /* 🔐 Socket Authentication */
-io.use((socket: Socket, next: (err?: Error) => void) => {
+io.use((socket, next) => {
   try {
-    const token = socket.handshake.auth.token;
+    const rawCookies = socket.handshake.headers.cookie;
+
+    if (!rawCookies) {
+      return next(new Error("Unauthorized"));
+    }
+
+    const parsed = cookie.parse(rawCookies);
+    const token = parsed.accessToken;
 
     if (!token) {
       return next(new Error("Unauthorized"));

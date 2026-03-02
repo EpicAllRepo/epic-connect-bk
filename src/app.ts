@@ -11,19 +11,20 @@ import cookieParser from "cookie-parser";
 
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-app.use(cookieParser());
-
-// Middleware - CORS: allow sab (Postman, browser, koi bhi origin)
 app.use(
   cors({
-    origin: ["http://localhost:3000", "https://epicconnect.epicglobal.co.in"],
+    origin: ["http://localhost:3001", "https://epicconnect.epicglobal.co.in"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
   })
 );
+
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cookieParser());
+
 
 // Routes
 app.use("/api/auth", authRoutes);

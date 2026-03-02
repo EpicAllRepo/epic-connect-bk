@@ -99,22 +99,24 @@ export const verifyOtp = async (req: Request, res: Response) => {
     res.clearCookie("accessToken", { path: "/" });
     res.clearCookie("accessToken", { path: "/api" });
 
-    // ✅ Access Token cookie
+    const isProd = process.env.NODE_ENV === "production";
+
     res.cookie("accessToken", accessToken, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      domain: isProd ? ".epicglobal.co.in" : undefined,
       path: "/",
-      maxAge: 2 * 60 * 1000, // 2 min
+      maxAge: 2 * 60 * 1000,
     });
 
-    // ✅ Refresh Token cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      domain: isProd ? ".epicglobal.co.in" : undefined,
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.json({

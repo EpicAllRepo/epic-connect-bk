@@ -443,7 +443,18 @@ export const trackClick = async (req: Request, res: Response) => {
       ? decodeURIComponent(url as string)
       : process.env.CLIENT_URL || "/";
 
-    return res.redirect(redirectUrl);
+    // ✅ HTML page return karo jo client-side redirect kare
+    return res.send(`
+      <html>
+        <head>
+          <meta http-equiv="refresh" content="0;url=${redirectUrl}" />
+        </head>
+        <body>
+          <script>window.location.href = "${redirectUrl}";</script>
+          <p>Redirecting... <a href="${redirectUrl}">Click here</a></p>
+        </body>
+      </html>
+    `);
 
   } catch (err: any) {
     console.error("Track click error:", err.message);
