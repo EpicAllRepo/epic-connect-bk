@@ -7,10 +7,13 @@ import { personalizeMessage } from "./personalization";
 import { io } from "../server";
 
 // ✅ NEW: Tracking inject function
-const BASE_URL = process.env.BASE_URL || "http://localhost:5001";
+const URL = "https://epicconnectapi.epicglobal.co.in";
+  // process.env.NODE_ENV === "production"
+  //   ? process.env.BASE_URL!
+  //   : "http://localhost:5001";
 
 function injectTracking(htmlBody: string, jobId: string): string {
-  const trackingPixel = `<img src="${BASE_URL}/api/track/open/${jobId}" width="1" height="1" style="display:none;width:1px;height:1px;" />`;
+  const trackingPixel = `<img src="${URL}/api/campaigns/track/open/${jobId}" width="1" height="1" style="display:none;width:1px;height:1px;" />`;
 
   let html = htmlBody;
   if (!htmlBody.trim().startsWith('<')) {
@@ -28,7 +31,7 @@ function injectTracking(htmlBody: string, jobId: string): string {
         return match;
       }
       const encodedUrl = encodeURIComponent(url);
-      return `href="${BASE_URL}/api/track/click/${jobId}?url=${encodedUrl}"`;
+      return `href="${URL}/api/campaigns/track/click/${jobId}?url=${encodedUrl}"`;
     }
   );
 

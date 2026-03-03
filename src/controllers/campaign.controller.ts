@@ -420,8 +420,13 @@ export const trackClick = async (req: Request, res: Response) => {
     const { jobId } = req.params;
     const { url } = req.query;
 
+    // ✅ ADD THIS - Debug karo pehle
+    console.log("CLICK TRACKED - jobId:", jobId, "url:", url);
+
     const job = await EmailJob.findById(jobId);
-    if (!job) return res.redirect(process.env.CLIENT_URL || "/");
+    if (!job) {
+      return res.redirect("https://epicglobal.co.in"); // fallback
+    }
 
     if (!job.isClicked) {
       job.isClicked = true;
@@ -439,26 +444,16 @@ export const trackClick = async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ FIXED - url nahi mila toh epicglobal pe bhejo
     const redirectUrl = url
       ? decodeURIComponent(url as string)
-      : process.env.CLIENT_URL || "/";
+      : "https://epicglobal.co.in";
 
-    // ✅ HTML page return karo jo client-side redirect kare
-    return res.send(`
-      <html>
-        <head>
-          <meta http-equiv="refresh" content="0;url=${redirectUrl}" />
-        </head>
-        <body>
-          <script>window.location.href = "${redirectUrl}";</script>
-          <p>Redirecting... <a href="${redirectUrl}">Click here</a></p>
-        </body>
-      </html>
-    `);
+    return res.redirect(redirectUrl);
 
   } catch (err: any) {
     console.error("Track click error:", err.message);
-    return res.redirect(process.env.CLIENT_URL || "/");
+    return res.redirect("https://epicglobal.co.in");
   }
 };
 
