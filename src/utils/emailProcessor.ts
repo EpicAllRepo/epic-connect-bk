@@ -7,7 +7,10 @@ import { personalizeMessage } from "./personalization";
 import { io } from "../server";
 
 // ✅ NEW: Tracking inject function
+
 const URL = "https://epicconnectapi.epicglobal.co.in";
+// const URL = "http://localhost:5001";
+
   // process.env.NODE_ENV === "production"
   //   ? process.env.BASE_URL!
   //   : "http://localhost:5001";
