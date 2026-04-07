@@ -110,19 +110,23 @@ export const verifyOtp = async (
     // ✅ SET COOKIE
     res.cookie("accessToken", accessToken, {
 
-      httpOnly: false,
+  httpOnly: false,
 
-      secure: isProd,
+  secure: isProd,
 
-      sameSite:
-        isProd ? "none" : "lax",
+  sameSite:
+    isProd ? "none" : "lax",
 
-      path: "/",
+  domain: isProd
+    ? ".epicglobal.co.in"
+    : undefined,
 
-      maxAge:
-        24 * 60 * 60 * 1000,
+  path: "/",
 
-    });
+  maxAge:
+    24 * 60 * 60 * 1000,
+
+});
 
     return res.json({
 
