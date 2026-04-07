@@ -12,121 +12,136 @@ const generateOTP = () => {
 
 // 🔹 LOGIN (Send OTP)
 export const loginUser = async (req: Request, res: Response) => {
-  console.log("LOGIN REQUEST 👉", req.body);
   try {
+
     const { email } = req.body;
 
     const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(403).json({
-        message: "You are not allowed to access this system",
+        message:
+          "You are not allowed to access this system",
       });
     }
 
     const otp = generateOTP();
 
-    // Hash OTP before saving
-    const hashedOtp = await bcrypt.hash(otp, 10);
+    const hashedOtp =
+      await bcrypt.hash(otp, 10);
 
     user.otp = hashedOtp;
-    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+    user.otpExpiry =
+      new Date(Date.now() + 5 * 60 * 1000);
+
     await user.save();
 
-    // Send to Gmail
     await sendOtpEmail(email, otp);
 
     return res.json({
-      message: "OTP sent successfully",
+      message: "OTP sent",
     });
+
   } catch (error: any) {
-    console.error("LOGIN ERROR 👉", error);
+
     return res.status(500).json({
-      message: error.message || "Server error",
+      message: error.message,
     });
+
   }
 };
 
+
 // 🔹 VERIFY OTP
-export const verifyOtp = async (req: Request, res: Response) => {
+export const verifyOtp = async (
+  req: Request,
+  res: Response
+) => {
+
   try {
+
     const { email, otp } = req.body;
 
     const user = await User.findOne({ email });
 
-    if (!user || !user.otp || !user.otpExpiry) {
-      return res.status(400).json({ message: "Invalid request" });
+    if (
+      !user ||
+      !user.otp ||
+      !user.otpExpiry
+    ) {
+      return res.status(400).json({
+        message: "Invalid request",
+      });
     }
 
     if (user.otpExpiry < new Date()) {
-      return res.status(400).json({ message: "OTP expired" });
+      return res.status(400).json({
+        message: "OTP expired",
+      });
     }
 
-    const isMatch = await bcrypt.compare(otp, user.otp);
+    const isMatch =
+      await bcrypt.compare(otp, user.otp);
 
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid OTP" });
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
     }
 
-    // Clear OTP
     user.otp = undefined;
     user.otpExpiry = undefined;
+
     await user.save();
 
-    // Access Token (2 min)
+    // ✅ ACCESS TOKEN ONLY
     const accessToken = jwt.sign(
       {
         userId: user._id,
         role: user.role,
       },
       process.env.JWT_SECRET as string,
-      { expiresIn: "2m" }
+      { expiresIn: "1d" }
     );
 
-    // Refresh Token (7 days)
-    const refreshToken = jwt.sign(
-      {
-        userId: user._id,
-      },
-      process.env.JWT_REFRESH_SECRET as string,
-      { expiresIn: "7d" }
-    );
+    const isProd =
+      process.env.NODE_ENV === "production";
 
-    // ✅ Pehle purane sare tokens clear karo
-    res.clearCookie("refreshToken", { path: "/" });
-    res.clearCookie("refreshToken", { path: "/api" });
-    res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
-    res.clearCookie("accessToken", { path: "/" });
-    res.clearCookie("accessToken", { path: "/api" });
-
-    const isProd = process.env.NODE_ENV === "production";
-
+    // ✅ SET COOKIE
     res.cookie("accessToken", accessToken, {
-      httpOnly: false,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      domain: isProd ? ".epicglobal.co.in" : undefined,
-      path: "/",
-      maxAge: 2 * 60 * 1000,
-    });
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
+      httpOnly: false,
+
       secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      domain: isProd ? ".epicglobal.co.in" : undefined,
+
+      sameSite:
+        isProd ? "none" : "lax",
+
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+
+      maxAge:
+        24 * 60 * 60 * 1000,
+
     });
 
     return res.json({
+
       accessToken,
+
       role: user.role,
+
       email: user.email,
+
     });
-  } catch (error) {
-    return res.status(500).json({ message: "Server error" });
+
+  } catch {
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+
   }
+
 };
 
 // 🔹 REFRESH ACCESS TOKEN
@@ -261,8 +276,18 @@ export const deleteAdmin = async (req: Request, res: Response) => {
 };
 
 // 🔹 LOGOUT
-export const logoutUser = async (req: Request, res: Response) => {
-  res.clearCookie("accessToken", { path: "/" });
-  res.clearCookie("refreshToken", { path: "/" });
-  return res.json({ message: "Logged out successfully" });
+export const logoutUser = async (
+  req: Request,
+  res: Response
+) => {
+
+  res.clearCookie(
+    "accessToken",
+    { path: "/" }
+  );
+
+  return res.json({
+    message: "Logged out",
+  });
+
 };
